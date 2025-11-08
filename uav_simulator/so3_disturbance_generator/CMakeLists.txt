@@ -68,9 +68,8 @@ include_directories(
 
 add_executable(so3_disturbance_generator src/so3_disturbance_generator.cpp)
 add_dependencies(so3_disturbance_generator ${PROJECT_NAME}_gencfg)
-target_link_libraries(so3_disturbance_generator 
-   ${catkin_LIBRARIES}
-   ${ARMADILLO_LIBRARIES}
-   pose_utils 
+target_link_libraries(so3_disturbance_generator
+  ${catkin_LIBRARIES}
+  ${ARMADILLO_LIBRARIES}
 )
 

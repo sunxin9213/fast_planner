@@ -9,18 +9,22 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES pose_utils
-#  CATKIN_DEPENDS geometry_msgs nav_msgs
-#  DEPENDS system_lib
+  #  CATKIN_DEPENDS geometry_msgs nav_msgs
+  #  DEPENDS system_lib
 )
 
 find_package(Armadillo REQUIRED)
 
 include_directories(
-    ${catkin_INCLUDE_DIRS}
-    ${ARMADILLO_INCLUDE_DIRS}
-    include
-    )
+  ${catkin_INCLUDE_DIRS}
+  ${ARMADILLO_INCLUDE_DIRS}
+  include
+)
 
-add_library(pose_utils 
-   ${ARMADILLO_LIBRARIES}
-   src/pose_utils.cpp)
+add_library(pose_utils
+  src/pose_utils.cpp)
+
+target_link_libraries(pose_utils
+  ${catkin_LIBRARIES}
+  ${ARMADILLO_LIBRARIES}
+)

@@ -28,25 +28,50 @@
 // #define current_img_ md_.depth_image_[image_cnt_ & 1]
 // #define last_img_ md_.depth_image_[!(image_cnt_ & 1)]
 
+/**
+ * @brief SDF地图初始化函数
+ * @param nh ROS节点句柄
+ * @details 从参数服务器加载所有配置参数，初始化地图缓冲区和ROS通信
+ *
+ * 参数说明：
+ * - resolution: 地图分辨率（米/体素）
+ * - map_size: 地图尺寸（米）
+ * - local_update_range: 局部更新范围（米）
+ * - obstacles_inflation: 障碍物膨胀距离
+ * - fx, fy, cx, cy: 相机内参
+ * - depth_filter_*: 深度图像过滤参数
+ * - p_hit_, p_miss_, p_occ_: 占据概率模型参数
+ * - esdf_slice_height_: ESDF可视化高度
+ *
+ * 占据概率使用对数形式（log-odds）：
+ * - logit(p) = log(p / (1-p))
+ * - 优点：可以简单地进行加法更新
+ */
 void SDFMap::initMap(ros::NodeHandle& nh) {
   node_ = nh;
 
-  /* get parameter */
+  /* 从参数服务器获取参数 */
   double x_size, y_size, z_size;
-  node_.param("sdf_map/resolution", mp_.resolution_, -1.0);
-  node_.param("sdf_map/map_size_x", x_size, -1.0);
-  node_.param("sdf_map/map_size_y", y_size, -1.0);
-  node_.param("sdf_map/map_size_z", z_size, -1.0);
+  
+  // 地图基本参数
+  node_.param("sdf_map/resolution", mp_.resolution_, -1.0);      // 地图分辨率
+  node_.param("sdf_map/map_size_x", x_size, -1.0);              // 地图X尺寸
+  node_.param("sdf_map/map_size_y", y_size, -1.0);              // 地图Y尺寸
+  node_.param("sdf_map/map_size_z", z_size, -1.0);              // 地图Z尺寸
+  
+  // 局部更新范围
   node_.param("sdf_map/local_update_range_x", mp_.local_update_range_(0), -1.0);
   node_.param("sdf_map/local_update_range_y", mp_.local_update_range_(1), -1.0);
   node_.param("sdf_map/local_update_range_z", mp_.local_update_range_(2), -1.0);
-  node_.param("sdf_map/obstacles_inflation", mp_.obstacles_inflation_, -1.0);
+  node_.param("sdf_map/obstacles_inflation", mp_.obstacles_inflation_, -1.0);  // 障碍物膨胀
 
+  // 相机内参（深度图像投影用）
   node_.param("sdf_map/fx", mp_.fx_, -1.0);
   node_.param("sdf_map/fy", mp_.fy_, -1.0);
   node_.param("sdf_map/cx", mp_.cx_, -1.0);
   node_.param("sdf_map/cy", mp_.cy_, -1.0);
 
+  // 深度图像过滤参数
   node_.param("sdf_map/use_depth_filter", mp_.use_depth_filter_, true);
   node_.param("sdf_map/depth_filter_tolerance", mp_.depth_filter_tolerance_, -1.0);
   node_.param("sdf_map/depth_filter_maxdist", mp_.depth_filter_maxdist_, -1.0);
@@ -55,47 +80,64 @@ void SDFMap::initMap(ros::NodeHandle& nh) {
   node_.param("sdf_map/k_depth_scaling_factor", mp_.k_depth_scaling_factor_, -1.0);
   node_.param("sdf_map/skip_pixel", mp_.skip_pixel_, -1);
 
-  node_.param("sdf_map/p_hit", mp_.p_hit_, 0.70);
-  node_.param("sdf_map/p_miss", mp_.p_miss_, 0.35);
-  node_.param("sdf_map/p_min", mp_.p_min_, 0.12);
-  node_.param("sdf_map/p_max", mp_.p_max_, 0.97);
-  node_.param("sdf_map/p_occ", mp_.p_occ_, 0.80);
+  // 占据概率模型参数（贝叶斯更新）
+  node_.param("sdf_map/p_hit", mp_.p_hit_, 0.70);      // 击中障碍物概率
+  node_.param("sdf_map/p_miss", mp_.p_miss_, 0.35);     // 未击中概率
+  node_.param("sdf_map/p_min", mp_.p_min_, 0.12);      // 最小截断概率
+  node_.param("sdf_map/p_max", mp_.p_max_, 0.97);      // 最大截断概率
+  node_.param("sdf_map/p_occ", mp_.p_occ_, 0.80);      // 占据判定阈值
+  
+  // 射线长度范围
   node_.param("sdf_map/min_ray_length", mp_.min_ray_length_, -0.1);
   node_.param("sdf_map/max_ray_length", mp_.max_ray_length_, -0.1);
 
+  // 可视化参数
   node_.param("sdf_map/esdf_slice_height", mp_.esdf_slice_height_, -0.1);
-  node_.param("sdf_map/visualization_truncate_height", mp_.visualization_truncate_height_, -0.1);
+  node_.param("sdf_map/visualization_truncate_height", mp_.visualization_truncate_height_, -1.0);
   node_.param("sdf_map/virtual_ceil_height", mp_.virtual_ceil_height_, -0.1);
 
+  // 调试显示参数
   node_.param("sdf_map/show_occ_time", mp_.show_occ_time_, false);
   node_.param("sdf_map/show_esdf_time", mp_.show_esdf_time_, false);
   node_.param("sdf_map/pose_type", mp_.pose_type_, 1);
 
+  // 其他参数
   node_.param("sdf_map/frame_id", mp_.frame_id_, string("world"));
   node_.param("sdf_map/local_bound_inflate", mp_.local_bound_inflate_, 1.0);
   node_.param("sdf_map/local_map_margin", mp_.local_map_margin_, 1);
   node_.param("sdf_map/ground_height", mp_.ground_height_, 1.0);
 
+  // 预计算参数
+  // 局部边界膨胀至少为分辨率大小
   mp_.local_bound_inflate_ = max(mp_.resolution_, mp_.local_bound_inflate_);
+  // 预计算分辨率倒数，后续使用乘法代替除法
   mp_.resolution_inv_ = 1 / mp_.resolution_;
+  
+  // 计算地图原点（地图中心在原点，Z轴从地面开始）
   mp_.map_origin_ = Eigen::Vector3d(-x_size / 2.0, -y_size / 2.0, mp_.ground_height_);
   mp_.map_size_ = Eigen::Vector3d(x_size, y_size, z_size);
 
+  // 预计算占据概率的对数形式（logit变换）
+  // logit(p) = log(p / (1-p))
+  // 使用对数形式便于贝叶斯更新（加法代替乘法）
   mp_.prob_hit_log_ = logit(mp_.p_hit_);
   mp_.prob_miss_log_ = logit(mp_.p_miss_);
   mp_.clamp_min_log_ = logit(mp_.p_min_);
   mp_.clamp_max_log_ = logit(mp_.p_max_);
   mp_.min_occupancy_log_ = logit(mp_.p_occ_);
-  mp_.unknown_flag_ = 0.01;
+  mp_.unknown_flag_ = 0.01;  // 未知区域标记
 
+  // 打印调试信息
   cout << "hit: " << mp_.prob_hit_log_ << endl;
   cout << "miss: " << mp_.prob_miss_log_ << endl;
   cout << "min log: " << mp_.clamp_min_log_ << endl;
   cout << "max: " << mp_.clamp_max_log_ << endl;
   cout << "thresh log: " << mp_.min_occupancy_log_ << endl;
 
+  // 计算各维度的体素数量：ceil(尺寸 / 分辨率)
   for (int i = 0; i < 3; ++i) mp_.map_voxel_num_(i) = ceil(mp_.map_size_(i) / mp_.resolution_);
 
+  // 计算地图边界
   mp_.map_min_boundary_ = mp_.map_origin_;
   mp_.map_max_boundary_ = mp_.map_origin_ + mp_.map_size_;
 

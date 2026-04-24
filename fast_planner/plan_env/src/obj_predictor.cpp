@@ -27,56 +27,97 @@
 #include <string>
 
 namespace fast_planner {
-/* ============================== obj history_ ============================== */
 
+/* ============================== 障碍物历史记录实现 ============================== */
+
+/**
+ * @brief 静态成员变量定义
+ */
 int ObjHistory::queue_size_;
 int ObjHistory::skip_num_;
 ros::Time ObjHistory::global_start_time_;
 
+/**
+ * @brief 初始化障碍物历史记录器
+ * @param id 障碍物ID
+ */
 void ObjHistory::init(int id) {
   clear();
   skip_ = 0;
   obj_idx_ = id;
 }
 
+/**
+ * @brief 障碍物位置消息回调
+ * @param msg ROS位姿消息
+ * @details
+ * 1. 降采样处理（跳过部分消息）
+ * 2. 提取位置和时间信息
+ * 3. 加入历史队列
+ * 4. 维护队列长度不超过限制
+ */
 void ObjHistory::poseCallback(const geometry_msgs::PoseStampedConstPtr& msg) {
   ++skip_;
+  // 降采样：每skip_num_条消息处理一次
   if (skip_ < ObjHistory::skip_num_) return;
 
+  // 存储位置和时间：[x, y, z, t]
   Eigen::Vector4d pos_t;
-  pos_t(0) = msg->pose.position.x, pos_t(1) = msg->pose.position.y, pos_t(2) = msg->pose.position.z;
+  pos_t(0) = msg->pose.position.x;
+  pos_t(1) = msg->pose.position.y;
+  pos_t(2) = msg->pose.position.z;
   pos_t(3) = (ros::Time::now() - ObjHistory::global_start_time_).toSec();
 
   history_.push_back(pos_t);
-  // cout << "idx: " << obj_idx_ << "pos_t: " << pos_t.transpose() << endl;
 
+  // 维护队列长度，移除最旧的数据
   if (history_.size() > queue_size_) history_.pop_front();
 
   skip_ = 0;
 }
 
-// ObjHistory::
-/* ============================== obj predictor ==============================
+/* ============================== 障碍物预测器实现 ==============================
+ */
+
+/**
+ * @brief 默认构造函数
  */
 ObjPredictor::ObjPredictor(/* args */) {
 }
 
+/**
+ * @brief 带节点句柄的构造函数
+ * @param node ROS节点句柄
+ */
 ObjPredictor::ObjPredictor(ros::NodeHandle& node) {
   this->node_handle_ = node;
 }
 
+/**
+ * @brief 析构函数
+ */
 ObjPredictor::~ObjPredictor() {
 }
 
+/**
+ * @brief 初始化障碍物预测器
+ * @details
+ * 1. 从参数服务器加载配置
+ * 2. 创建预测轨迹和尺寸容器
+ * 3. 订阅障碍物话题
+ * 4. 启动预测定时器
+ */
 void ObjPredictor::init() {
-  /* get param */
-  node_handle_.param("prediction/obj_num", obj_num_, 5);
-  node_handle_.param("prediction/lambda", lambda_, 1.0);
-  node_handle_.param("prediction/predict_rate", predict_rate_, 1.0);
+  /* 从参数服务器获取参数 */
+  node_handle_.param("prediction/obj_num", obj_num_, 5);        // 障碍物数量
+  node_handle_.param("prediction/lambda", lambda_, 1.0);        // 拟合参数
+  node_handle_.param("prediction/predict_rate", predict_rate_, 1.0);  // 预测频率
 
+  // 初始化预测轨迹容器
   predict_trajs_.reset(new vector<PolynomialPrediction>);
   predict_trajs_->resize(obj_num_);
 
+  // 初始化障碍物尺寸容器
   obj_scale_.reset(new vector<Eigen::Vector3d>);
   obj_scale_->resize(obj_num_);
   scale_init_.resize(obj_num_);

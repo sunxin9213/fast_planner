@@ -28,25 +28,83 @@
 #include <iostream>
 #include <plan_env/raycast.h>
 
+/**
+ * @brief 符号函数
+ * @param x 输入整数
+ * @return 符号值：-1, 0, 或 1
+ * @details 用于确定射线步进方向：
+ * - 正数返回1
+ * - 负数返回-1
+ * - 零返回0
+ */
 int signum(int x) {
   return x == 0 ? 0 : x < 0 ? -1 : 1;
 }
 
+/**
+ * @brief 模运算函数 - 确保结果为正数
+ * @param value 被模数
+ * @param modulus 模数
+ * @return 标准化到[0, modulus)范围的值
+ * @details 处理负数的模运算：
+ * 例如：mod(-0.5, 1.0) = 0.5
+ * 使用两次fmod确保结果始终为正
+ */
 double mod(double value, double modulus) {
   return fmod(fmod(value, modulus) + modulus, modulus);
 }
 
+/**
+ * @brief 计算光线与单位立方体边界首次相交的时间
+ * @param s 起始坐标（某个维度）
+ * @param ds 方向分量（该维度的步长）
+ * @return 到达下一个整数坐标的最小正时间t
+ * @details 算法原理：
+ * - 如果方向为负，则取反s和ds后递归处理
+ * - 将s标准化到[0,1)区间（取小数部分）
+ * - 求解s + t*ds = 1，得到t = (1-s)/ds
+ * - 这对应光线首次穿过当前体素右边界的时间
+ *
+ * 数学推导：
+ * 假设光线从s位置开始，方向为ds（正数），
+ * 我们要找最小的正t使得 s + t*ds = k（整数）
+ * 即 t = (k - s)/ds，最小的正t对应k=1
+ * 所以 t = (1 - s%1) / ds
+ */
 double intbound(double s, double ds) {
-  // Find the smallest positive t such that s+t*ds is an integer.
+  // 找到最小的正t使得 s+t*ds 是整数
   if (ds < 0) {
+    // 负方向：取反后递归处理
     return intbound(-s, -ds);
   } else {
-    s = mod(s, 1);
-    // problem is now s+t*ds = 1
+    s = mod(s, 1);  // 标准化到[0,1)
+    // 现在问题是 s + t*ds = 1
     return (1 - s) / ds;
   }
 }
 
+/**
+ * @brief 光线投射 - 将射线穿过的所有体素中心点输出
+ * @param start 射线起点（世界坐标）
+ * @param end 射线终点（世界坐标）
+ * @param min 地图最小边界
+ * @param max 地图最大边界
+ * @param output_points_cnt 输出的体素点数量
+ * @param output 输出的体素中心点数组
+ * @details 基于"A Fast Voxel Traversal Algorithm for Ray Tracing"
+ * (John Amanatides & Andrew Woo, 1987) 算法
+ *
+ * 算法核心思想：
+ * 1. 将射线参数化：P(t) = origin + t * direction
+ * 2. 不直接存储t，而是维护tMaxX, tMaxY, tMaxZ
+ *    - tMaxX: 到达下一个X体素边界的时间
+ *    - tMaxY: 到达下一个Y体素边界的时间
+ *    - tMaxZ: 到达下一个Z体素边界的时间
+ * 3. 每次选择最小的tMax对应的方向前进
+ * 4. 大大减少了碰撞检测次数
+ *
+ * 时间复杂度：从起点到终点平均 O(|end-start| / resolution)
+ */
 void Raycast(const Eigen::Vector3d& start, const Eigen::Vector3d& end, const Eigen::Vector3d& min,
              const Eigen::Vector3d& max, int& output_points_cnt, Eigen::Vector3d* output) {
   //    std::cout << start << ' ' << end << std::endl;

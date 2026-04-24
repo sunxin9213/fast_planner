@@ -31,18 +31,45 @@
 
 using std::vector;
 
+/**
+ * @brief PolynomialTraj类 - 分段多项式轨迹
+ *
+ * 表示由多个多项式段组成的连续轨迹。每段可以是不同阶数的多项式。
+ * 支持轨迹的位置、速度、加速度评估，以及轨迹长度、 jerks 等计算。
+ *
+ * 数据结构：
+ * - times: 每段的时间长度
+ * - cxs, cys, czs: 每段的多项式系数（从高阶到低阶存储）
+ *
+ * 示例：5次多项式 p(t) = c0 + c1*t + c2*t^2 + c3*t^3 + c4*t^4 + c5*t^5
+ * 系数存储为 [c5, c4, c3, c2, c1, c0]（从高阶到低阶）
+ */
 class PolynomialTraj {
 private:
-  vector<double> times;        // time of each segment
-  vector<vector<double>> cxs;  // coefficient of x of each segment, from high order to low
-  vector<vector<double>> cys;  // coefficient of y of each segment
-  vector<vector<double>> czs;  // coefficient of z of each segment
+  /// @brief 每段的时间长度
+  vector<double> times;
+  
+  /// @brief 每段x轴多项式系数（从高阶到低阶）
+  vector<vector<double>> cxs;
+  
+  /// @brief 每段y轴多项式系数
+  vector<vector<double>> cys;
+  
+  /// @brief 每段z轴多项式系数
+  vector<vector<double>> czs;
 
+  /// @brief 轨迹总时间
   double time_sum;
+  
+  /// @brief 段数
   int num_seg;
 
-  /* evaluation */
+  /* 评估用数据成员 */
+  
+  /// @brief 离散化的轨迹点序列
   vector<Eigen::Vector3d> traj_vec3d;
+  
+  /// @brief 轨迹长度
   double length;
 
 public:
@@ -51,15 +78,23 @@ public:
   ~PolynomialTraj() {
   }
 
+  /// @brief 重置轨迹数据
   void reset() {
     times.clear(), cxs.clear(), cys.clear(), czs.clear();
     time_sum = 0.0, num_seg = 0;
   }
 
+  /// @brief 添加一段多项式
+  /// @param cx x系数向量（从高阶到低阶）
+  /// @param cy y系数向量
+  /// @param cz z系数向量
+  /// @param t 该段时间长度
   void addSegment(vector<double> cx, vector<double> cy, vector<double> cz, double t) {
     cxs.push_back(cx), cys.push_back(cy), czs.push_back(cz), times.push_back(t);
   }
 
+  /// @brief 初始化轨迹参数
+  /// @details 计算总时间和段数
   void init() {
     num_seg = times.size();
     time_sum = 0.0;
@@ -68,6 +103,12 @@ public:
     }
   }
 
+  /// @brief 评估轨迹位置
+  /// @param t 查询时间（从轨迹开始）
+  /// @return 3D位置
+  /// @details 算法：
+  /// 1. 确定时间t属于哪一段（累减times[i]直到t < times[idx]）
+  /// 2. 使用该段的多项式系数计算位置
   Eigen::Vector3d evaluate(double t) {
     /* detetrmine segment num */
     int idx = 0;
@@ -89,19 +130,25 @@ public:
     return pt;
   }
 
+  /// @brief 评估轨迹速度
+  /// @param t 查询时间
+  /// @return 3D速度向量
+  /// @details 速度是位置对时间的导数：
+  /// v(t) = dc/dt = c1 + 2*c2*t + 3*c3*t^2 + ...
+  /// 系数关系：v_coef[i] = (order-1-i) * p_coef[i]
   Eigen::Vector3d evaluateVel(double t) {
-    /* detetrmine segment num */
+    /* 确定段索引 */
     int idx = 0;
     while (times[idx] < t) {
       t -= times[idx];
       ++idx;
     }
 
-    /* evaluation */
+    /* 评估速度 */
     int order = cxs[idx].size();
     Eigen::VectorXd vx(order - 1), vy(order - 1), vz(order - 1);
 
-    /* coef of vel */
+    /* 速度多项式系数 = 导数系数 */
     for (int i = 0; i < order - 1; ++i) {
       vx(i) = double(i + 1) * cxs[idx][order - 2 - i];
       vy(i) = double(i + 1) * cys[idx][order - 2 - i];
@@ -117,6 +164,11 @@ public:
     return vel;
   }
 
+  /// @brief 评估轨迹加速度
+  /// @param t 查询时间
+  /// @return 3D加速度向量
+  /// @details 加速度是速度的导数（位置的二阶导数）：
+  /// a(t) = d²p/dt² = 2*c2 + 6*c3*t + ...
   Eigen::Vector3d evaluateAcc(double t) {
     /* detetrmine segment num */
     int idx = 0;
@@ -145,11 +197,16 @@ public:
     return acc;
   }
 
-  /* for evaluating traj, should be called in sequence!!! */
+  /// @brief 获取轨迹总时间
+  /// @return 轨迹总时长
+  /* 用于评估轨迹，应按顺序调用!!! */
   double getTimeSum() {
     return this->time_sum;
   }
 
+  /// @brief 获取离散化的轨迹点序列
+  /// @return 轨迹点向量（间隔0.01秒采样）
+  /// @details 使用0.01秒间隔对轨迹进行离散化
   vector<Eigen::Vector3d> getTraj() {
     double eval_t = 0.0;
     traj_vec3d.clear();
@@ -161,6 +218,9 @@ public:
     return traj_vec3d;
   }
 
+  /// @brief 计算轨迹总长度
+  /// @return 轨迹长度（米）
+  /// @details 对离散轨迹点累加欧几里得距离
   double getLength() {
     length = 0.0;
 
@@ -173,10 +233,16 @@ public:
     return length;
   }
 
+  /// @brief 计算平均速度
+  /// @return 平均速度 = 轨迹长度 / 总时间
   double getMeanVel() {
     double mean_vel = length / time_sum;
   }
 
+  /// @brief 计算加速度代价
+  /// @return 加速度代价积分
+  /// @details 使用2范数平方积分：∫||a(t)||² dt
+  /// 对于n次多项式，加速度代价 = ∑ (2*c_n-2)² * Δt
   double getAccCost() {
     double cost = 0.0;
     int order = cxs[0].size();
@@ -190,6 +256,10 @@ public:
     return cost;
   }
 
+  /// @brief 计算加加速度(Jerk)代价
+  /// @return Jerk代价积分
+  /// @details Jerk是加速度的导数（三阶导数），反映运动平滑度
+  /// 公式：J = ∫||j(t)||² dt
   double getJerk() {
     double jerk = 0.0;
 

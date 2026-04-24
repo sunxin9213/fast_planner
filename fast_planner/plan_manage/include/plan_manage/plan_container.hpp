@@ -38,30 +38,66 @@ using std::vector;
 
 namespace fast_planner {
 
+/**
+ * @brief GlobalTrajData类 - 全局轨迹数据结构
+ *
+ * 存储和管理全局+局部轨迹数据。
+ *
+ * 数据结构说明：
+ * - global_traj_: 全局多项式轨迹
+ * - local_traj_: 局部B样条轨迹数组（位置、速度、加速度）
+ *
+ * 时间管理：
+ * - 局部轨迹会更新全局轨迹的时间（time_increase_）
+ * - 通过时间偏移实现全局和局部轨迹的无缝切换
+ */
 class GlobalTrajData {
 private:
 public:
+  /// @brief 全局多项式轨迹
   PolynomialTraj global_traj_;
+  
+  /// @brief 局部B样条轨迹数组
+  /// local_traj_[0]: 位置
+  /// local_traj_[1]: 一阶导数（速度）
+  /// local_traj_[2]: 二阶导数（加速度）
   vector<NonUniformBspline> local_traj_;
 
+  /// @brief 全局轨迹总时长
   double global_duration_;
+  
+  /// @brief 全局轨迹开始时间（ROS时间）
   ros::Time global_start_time_;
+  
+  /// @brief 局部轨迹时间范围
   double local_start_time_, local_end_time_;
+  
+  /// @brief 时间增量（局部规划导致的时间调整）
   double time_increase_;
+  
+  /// @brief 上一次时间增量
   double last_time_inc_;
 
   GlobalTrajData(/* args */) {}
 
   ~GlobalTrajData() {}
 
+  /// @brief 检查局部轨迹是否到达目标
+  /// @return 是否到达
   bool localTrajReachTarget() { return fabs(local_end_time_ - global_duration_) < 0.1; }
 
+  /**
+   * @brief 设置全局轨迹
+   * @param traj 多项式轨迹
+   * @param time 轨迹开始时间
+   */
   void setGlobalTraj(const PolynomialTraj& traj, const ros::Time& time) {
     global_traj_ = traj;
     global_traj_.init();
     global_duration_ = global_traj_.getTimeSum();
     global_start_time_ = time;
 
+    // 清空局部轨迹
     local_traj_.clear();
     local_start_time_ = -1;
     local_end_time_ = -1;
@@ -69,11 +105,21 @@ public:
     last_time_inc_ = 0.0;
   }
 
+  /**
+   * @brief 设置局部轨迹
+   * @param traj B样条轨迹
+   * @param local_ts 局部轨迹开始时间
+   * @param local_te 局部轨迹结束时间
+   * @param time_inc 时间增量
+   * @details
+   * 1. 创建位置、速度、加速度三条B样条
+   * 2. 更新全局时间参数
+   */
   void setLocalTraj(NonUniformBspline traj, double local_ts, double local_te, double time_inc) {
     local_traj_.resize(3);
     local_traj_[0] = traj;
-    local_traj_[1] = local_traj_[0].getDerivative();
-    local_traj_[2] = local_traj_[1].getDerivative();
+    local_traj_[1] = local_traj_[0].getDerivative();  // 速度
+    local_traj_[2] = local_traj_[1].getDerivative();  // 加速度
 
     local_start_time_ = local_ts;
     local_end_time_ = local_te;
@@ -82,6 +128,15 @@ public:
     last_time_inc_ = time_inc;
   }
 
+  /**
+   * @brief 获取任意时刻的位置
+   * @param t 绝对时间
+   * @return 3D位置
+   * @details 根据时间判断使用全局还是局部轨迹
+   * - t <= local_start_time: 使用全局轨迹（调整后）
+   * - t >= local_end_time: 使用全局轨迹
+   * - 其他: 使用局部轨迹
+   */
   Eigen::Vector3d getPosition(double t) {
     if (t >= -1e-3 && t <= local_start_time_) {
       return global_traj_.evaluate(t - time_increase_ + last_time_inc_);
@@ -94,6 +149,7 @@ public:
     }
   }
 
+  /// @brief 获取任意时刻的速度
   Eigen::Vector3d getVelocity(double t) {
     if (t >= -1e-3 && t <= local_start_time_) {
       return global_traj_.evaluateVel(t);
@@ -106,6 +162,7 @@ public:
     }
   }
 
+  /// @brief 获取任意时刻的加速度
   Eigen::Vector3d getAcceleration(double t) {
     if (t >= -1e-3 && t <= local_start_time_) {
       return global_traj_.evaluateAcc(t);
@@ -118,9 +175,14 @@ public:
     }
   }
 
-  // get Bspline paramterization data of a local trajectory within a sphere
-  // start_t: start time of the trajectory
-  // dist_pt: distance between the discretized points
+  /// @brief 获取指定半径范围内的轨迹数据（B样条参数化）
+  /// @param start_t 轨迹开始时间
+  /// @param des_radius 搜索半径
+  /// @param dist_pt 离散点间距
+  /// @param point_set 输出的轨迹点集合
+  /// @param start_end_derivative 起点/终点导数 [v0, v1, a0, a1]
+  /// @param dt 时间步长
+  /// @param seg_duration 轨迹段时长
   void getTrajByRadius(const double& start_t, const double& des_radius, const double& dist_pt,
                        vector<Eigen::Vector3d>& point_set, vector<Eigen::Vector3d>& start_end_derivative,
                        double& dt, double& seg_duration) {
@@ -164,10 +226,13 @@ public:
     start_end_derivative.push_back(getAcceleration(start_t + seg_time));
   }
 
-  // get Bspline paramterization data of a fixed duration local trajectory
-  // start_t: start time of the trajectory
-  // duration: time length of the segment
-  // seg_num: discretized the segment into *seg_num* parts
+  /// @brief 获取固定时长的轨迹数据（B样条参数化）
+  /// @param start_t 开始时间
+  /// @param duration 时长
+  /// @param seg_num 段数
+  /// @param point_set 轨迹点输出
+  /// @param start_end_derivative 起点/终点导数
+  /// @param dt 时间步长
   void getTrajByDuration(double start_t, double duration, int seg_num,
                          vector<Eigen::Vector3d>& point_set,
                          vector<Eigen::Vector3d>& start_end_derivative, double& dt) {
@@ -185,18 +250,28 @@ public:
   }
 };
 
+/**
+ * @brief PlanParameters结构体 - 规划参数
+ *
+ * 存储规划算法使用的所有参数，包括物理限制和计算时间统计
+ */
 struct PlanParameters {
-  /* planning algorithm parameters */
-  double max_vel_, max_acc_, max_jerk_;  // physical limits
-  double local_traj_len_;                // local replanning trajectory length
-  double ctrl_pt_dist;                   // distance between adjacient B-spline
-                                         // control points
-  double clearance_;
-  int dynamic_;
-  /* processing time */
-  double time_search_ = 0.0;
-  double time_optimize_ = 0.0;
-  double time_adjust_ = 0.0;
+  /* 规划算法参数 */
+  
+  /// @brief 物理限制
+  double max_vel_;    // 最大速度 (m/s)
+  double max_acc_;    // 最大加速度 (m/s²)
+  double max_jerk_;   // 最大加加速度 (m/s³)
+  
+  double local_traj_len_;   // 局部重规划轨迹长度
+  double ctrl_pt_dist;      // B样条控制点间距
+  double clearance_;        // 间隙（安全距离）
+  int dynamic_;            // 动态障碍物避让开关
+  
+  /* 处理时间统计 */
+  double time_search_ = 0.0;   // 搜索时间
+  double time_optimize_ = 0.0; // 优化时间
+  double time_adjust_ = 0.0;   // 调整时间
 };
 
 struct LocalTrajData {

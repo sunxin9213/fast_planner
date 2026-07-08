@@ -64,6 +64,7 @@ void updateCallback(const ros::TimerEvent& e);
 void visualizeObj(int id);
 
 int main(int argc, char** argv) {
+  // 动态障碍物生成器会随机初始化多个移动目标，并通过ROS发布其位姿与可视化消息。
   ros::init(argc, argv, "dynamic_obj");
   ros::NodeHandle node("~");
 
@@ -134,6 +135,7 @@ int main(int argc, char** argv) {
 }
 
 void updateCallback(const ros::TimerEvent& e) {
+  // 定时更新动态障碍物状态：周期性改变输入、推进仿真，并检测是否发生碰撞。
   ros::Time time_now = ros::Time::now();
 
   /* ---------- change input ---------- */

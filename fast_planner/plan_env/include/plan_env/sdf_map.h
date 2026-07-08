@@ -179,10 +179,10 @@ struct MappingData {
   std::vector<char> occupancy_buffer_neg;
   
   /// @brief 膨胀占据缓冲区（用于碰撞检测）
-  std::vector<char> occupancy_buffer_inflate_;
+  std::vector<char> occupancy_buffer_inflate_;//默认值为0，表示未膨胀；1表示膨胀
   
   /// @brief ESDF距离场缓冲区（正向）
-  std::vector<double> distance_buffer_;
+  std::vector<double> distance_buffer_;//默认值为10000，表示未知区域
   
   /// @brief ESDF距离场缓冲区（负向，用于未知区域）
   std::vector<double> distance_buffer_neg_;
@@ -660,7 +660,7 @@ inline double SDFMap::getDistWithGradTrilinear(Eigen::Vector3d pos, Eigen::Vecto
   Eigen::Vector3d idx_pos, diff;
   indexToPos(idx, idx_pos);
 
-  diff = (pos - idx_pos) * mp_.resolution_inv_;
+  diff = (pos - idx_pos) * mp_.resolution_inv_;//该变量含义为 pos在idx_pos体素内的归一化位置，范围为[0,1]，用于三线性插值计算。
 
   double values[2][2][2];
   for (int x = 0; x < 2; x++) {

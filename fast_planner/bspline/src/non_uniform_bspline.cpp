@@ -65,6 +65,7 @@ NonUniformBspline::~NonUniformBspline() {}
  */
 void NonUniformBspline::setUniformBspline(const Eigen::MatrixXd& points, const int& order,
                                            const double& interval) {
+  // 初始化一条均匀B样条：保存控制点、阶数和基础时间间隔，并构造节点向量。
   control_points_ = points;  // 设置控制点
   p_              = order;   // 设置样条阶数
   interval_       = interval; // 设置基础时间间隔
@@ -152,6 +153,7 @@ pair<Eigen::VectorXd, Eigen::VectorXd> NonUniformBspline::getHeadTailPts() {
  * @return 曲线上的点坐标
  */
 Eigen::VectorXd NonUniformBspline::evaluateDeBoor(const double& u) {
+  // 使用De Boor递归算法求值，这是B样条曲线求值的标准稳定方法。
   // 将参数限制在有效范围内
   double ub = min(max(u_(p_), u), u_(m_ - p_));
 

@@ -47,8 +47,8 @@ namespace fast_planner {
 class EDTEnvironment {
 private:
   /* data */
-  ObjPrediction obj_prediction_;
-  ObjScale obj_scale_;
+  ObjPrediction obj_prediction_;//障碍物未来的运动轨迹
+  ObjScale obj_scale_;//障碍物的大小
   double resolution_inv_;
   /// @brief 计算点到轴对齐包围盒(AABB)的距离
   /// @param idx 障碍物索引

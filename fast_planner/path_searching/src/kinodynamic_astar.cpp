@@ -220,7 +220,7 @@ int KinodynamicAstar::search(Eigen::Vector3d start_pt, Eigen::Vector3d start_v, 
 
         Eigen::Vector3d pro_pos = pro_state.head(3);
 
-        // 检查1:是否在关闭集中(已扩展过)
+        // 检查1:是否在关闭集中(已扩展过)，避免重复扩展同一状态
         Eigen::Vector3i pro_id = posToIndex(pro_pos);
         int pro_t_id = timeToIndex(pro_t);
         PathNodePtr pro_node = dynamic ? expanded_nodes_.find(pro_id, pro_t_id) : expanded_nodes_.find(pro_id);
@@ -229,14 +229,14 @@ int KinodynamicAstar::search(Eigen::Vector3d start_pt, Eigen::Vector3d start_v, 
           continue;
         }
 
-        // 检查2:速度约束
+        // 检查2:速度约束，防止生成超出系统允许速度范围的候选状态
         Eigen::Vector3d pro_v = pro_state.tail(3);
         if (fabs(pro_v(0)) > max_vel_ || fabs(pro_v(1)) > max_vel_ || fabs(pro_v(2)) > max_vel_)
         {
           continue;
         }
 
-        // 检查3:避免在同一网格重复扩展
+        // 检查3:避免在同一网格重复扩展，减少不必要的状态冗余
         Eigen::Vector3i diff = pro_id - cur_node->index;
         int diff_time = pro_t_id - cur_node->time_idx;
         if (diff.norm() == 0 && ((!dynamic) || diff_time == 0))
@@ -244,7 +244,7 @@ int KinodynamicAstar::search(Eigen::Vector3d start_pt, Eigen::Vector3d start_v, 
           continue;
         }
 
-        // 检查4:碰撞检测 - 沿轨迹采样检查是否与障碍物相交
+        // 检查4:碰撞检测 - 沿轨迹采样检查是否与障碍物相交，保证生成的轨迹安全
         Eigen::Vector3d pos;
         Eigen::Matrix<double, 6, 1> xt;
         bool is_occ = false;

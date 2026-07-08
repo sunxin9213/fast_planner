@@ -85,12 +85,12 @@ void KinoReplanFSM::waypointCallback(const nav_msgs::PathConstPtr& msg) {
   have_target_ = true;
 
   if (exec_state_ == WAIT_TARGET)
-    changeFSMExecState(GEN_NEW_TRAJ, "TRIG");
+    changeFSMExecState(GEN_NEW_TRAJ, "TRIG");//这函数，就是打印一条日志，打印当前状态机的状态变化
   else if (exec_state_ == EXEC_TRAJ)
     changeFSMExecState(REPLAN_TRAJ, "TRIG");
 }
 
-void KinoReplanFSM::odometryCallback(const nav_msgs::OdometryConstPtr& msg) {
+void KinoReplanFSM::odometryCallback(const nav_msgs::OdometryConstPtr& msg) {//获取无人机的位置信息，速度信息，姿态信息
   odom_pos_(0) = msg->pose.pose.position.x;
   odom_pos_(1) = msg->pose.pose.position.y;
   odom_pos_(2) = msg->pose.pose.position.z;
@@ -237,7 +237,7 @@ void KinoReplanFSM::checkCollisionCallback(const ros::TimerEvent& e) {
         edt_env->evaluateCoarseEDT(end_pt_, /* time to program start + */ info->duration_) :
         edt_env->evaluateCoarseEDT(end_pt_, -1.0);
 
-    if (dist <= 0.3) {
+    if (dist <= 0.3) {//仅有当目标点距离障碍物小于0.3m时，才会进行重新规划
       /* try to find a max distance goal around */
       bool            new_goal = false;
       const double    dr = 0.5, dtheta = 30, dz = 0.3;

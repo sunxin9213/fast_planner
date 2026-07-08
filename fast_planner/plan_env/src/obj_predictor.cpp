@@ -154,6 +154,7 @@ ObjScale ObjPredictor::getObjScale() {
 }
 
 void ObjPredictor::predictPolyFit() {
+  // 使用5次多项式拟合每个动态障碍物的历史轨迹，作为更精细的预测模型。
   /* iterate all obj */
   for (int i = 0; i < obj_num_; i++) {
     /* ---------- write A and b ---------- */
@@ -238,6 +239,7 @@ void ObjPredictor::markerCallback(const visualization_msgs::MarkerConstPtr& msg)
 }
 
 void ObjPredictor::predictConstVel() {
+  // 采用恒速模型做简化预测，适合实时避障场景，计算量较低。
   for (int i = 0; i < obj_num_; i++) {
     /* ---------- get the last two point ---------- */
     list<Eigen::Vector4d> his;

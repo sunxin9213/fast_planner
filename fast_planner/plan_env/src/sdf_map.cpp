@@ -171,7 +171,7 @@ void SDFMap::initMap(ros::NodeHandle& nh) {
   /* init callback */
 
   depth_sub_.reset(new message_filters::Subscriber<sensor_msgs::Image>(node_, "/sdf_map/depth", 50));
-
+  //将图像和位姿同步，使用近似时间同步策略
   if (mp_.pose_type_ == POSE_STAMPED) {
     pose_sub_.reset(
         new message_filters::Subscriber<geometry_msgs::PoseStamped>(node_, "/sdf_map/pose", 25));
@@ -193,7 +193,7 @@ void SDFMap::initMap(ros::NodeHandle& nh) {
   indep_cloud_sub_ =
       node_.subscribe<sensor_msgs::PointCloud2>("/sdf_map/cloud", 10, &SDFMap::cloudCallback, this);
   indep_odom_sub_ =
-      node_.subscribe<nav_msgs::Odometry>("/sdf_map/odom", 10, &SDFMap::odomCallback, this);
+      node_.subscribe<nav_msgs::Odometry>("/sdf_map/odom", 10, &SDFMap::odomCallback, this);//pose存储一下
 
   occ_timer_ = node_.createTimer(ros::Duration(0.05), &SDFMap::updateOccupancyCallback, this);
   esdf_timer_ = node_.createTimer(ros::Duration(0.05), &SDFMap::updateESDFCallback, this);
@@ -862,7 +862,7 @@ void SDFMap::updateESDFCallback(const ros::TimerEvent& /*event*/) {
 }
 
 void SDFMap::depthPoseCallback(const sensor_msgs::ImageConstPtr& img,
-                               const geometry_msgs::PoseStampedConstPtr& pose) {
+                               const geometry_msgs::PoseStampedConstPtr& pose) {//把位姿和深度图像传入成员变量
   /* get depth image */
   cv_bridge::CvImagePtr cv_ptr;
   cv_ptr = cv_bridge::toCvCopy(img, img->encoding);
@@ -899,7 +899,7 @@ void SDFMap::odomCallback(const nav_msgs::OdometryConstPtr& odom) {
   md_.has_odom_ = true;
 }
 
-void SDFMap::cloudCallback(const sensor_msgs::PointCloud2ConstPtr& img) {
+void SDFMap::cloudCallback(const sensor_msgs::PointCloud2ConstPtr& img) {//根据点云更新occupancy_buffer_inflate_，并设置局部更新范围的边界，原始点云未保存
 
   pcl::PointCloud<pcl::PointXYZ> latest_cloud;
   pcl::fromROSMsg(*img, latest_cloud);
@@ -916,12 +916,12 @@ void SDFMap::cloudCallback(const sensor_msgs::PointCloud2ConstPtr& img) {
   if (isnan(md_.camera_pos_(0)) || isnan(md_.camera_pos_(1)) || isnan(md_.camera_pos_(2))) return;
 
   this->resetBuffer(md_.camera_pos_ - mp_.local_update_range_,
-                    md_.camera_pos_ + mp_.local_update_range_);
+                    md_.camera_pos_ + mp_.local_update_range_);//local_update_range表示局部更新范围阈值，重置一定范围内的buffer
 
   pcl::PointXYZ pt;
   Eigen::Vector3d p3d, p3d_inf;
 
-  int inf_step = ceil(mp_.obstacles_inflation_ / mp_.resolution_);
+  int inf_step = ceil(mp_.obstacles_inflation_ / mp_.resolution_);//向上取整，计算膨胀步数
   int inf_step_z = 1;
 
   double max_x, max_y, max_z, min_x, min_y, min_z;
@@ -943,10 +943,10 @@ void SDFMap::cloudCallback(const sensor_msgs::PointCloud2ConstPtr& img) {
     Eigen::Vector3i inf_pt;
 
     if (fabs(devi(0)) < mp_.local_update_range_(0) && fabs(devi(1)) < mp_.local_update_range_(1) &&
-        fabs(devi(2)) < mp_.local_update_range_(2)) {
+        fabs(devi(2)) < mp_.local_update_range_(2)) {//如果该点在局部更新范围内，则进行膨胀处理
 
       /* inflate the point */
-      for (int x = -inf_step; x <= inf_step; ++x)
+      for (int x = -inf_step; x <= inf_step; ++x)//对点云进行膨胀，这里相当于在点云周围生成一个立方体，立方体的边长为2*inf_step+1，步长为mp_.resolution_
         for (int y = -inf_step; y <= inf_step; ++y)
           for (int z = -inf_step_z; z <= inf_step_z; ++z) {
 
@@ -954,7 +954,7 @@ void SDFMap::cloudCallback(const sensor_msgs::PointCloud2ConstPtr& img) {
             p3d_inf(1) = pt.y + y * mp_.resolution_;
             p3d_inf(2) = pt.z + z * mp_.resolution_;
 
-            max_x = max(max_x, p3d_inf(0));
+            max_x = max(max_x, p3d_inf(0));//选取最大值和最小值，确定局部更新范围的边界
             max_y = max(max_y, p3d_inf(1));
             max_z = max(max_z, p3d_inf(2));
 

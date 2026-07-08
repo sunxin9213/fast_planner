@@ -1,0 +1,19 @@
+flowchart TD
+    A[开始：Raycast] --> B[输入射线起点 start 和终点 end]
+    B --> C[计算起始体素坐标 x/y/z]
+    C --> D[计算终点体素坐标 endX/endY/endZ]
+    D --> E[计算方向向量 dx/dy/dz]
+    E --> F[确定步进方向 stepX/stepY/stepZ]
+    F --> G[调用 intbound 计算 tMaxX/tMaxY/tMaxZ]
+    G --> H[计算 tDeltaX/tDeltaY/tDeltaZ]
+    H --> I{stepX/stepY/stepZ 是否都为 0？}
+    I -- 是 --> J[结束]
+    I -- 否 --> K[当前体素是否在边界范围内？]
+    K -- 是 --> L[记录当前体素]
+    K -- 否 --> M[跳过当前体素]
+    L --> N{是否到达终点体素？}
+    M --> N
+    N -- 是 --> J
+    N -- 否 --> O[选择最小 tMax 的轴]
+    O --> P[更新 x/y/z 到下一个体素]
+    P --> K

@@ -399,7 +399,7 @@ int SDFMap::setCacheOccupancy(Eigen::Vector3d pos, int occ) {
   posToIndex(pos, id);
   int idx_ctns = toAddress(id);
 
-  md_.count_hit_and_miss_[idx_ctns] += 1;
+  md_.count_hit_and_miss_[idx_ctns] += 1;//有过一次观测，不管是击中还是未击中，计数器都加1
 
   if (md_.count_hit_and_miss_[idx_ctns] == 1) {
     md_.cache_voxel_.push(id);
@@ -425,9 +425,9 @@ void SDFMap::projectDepthImage() {
 
   // cout << "rotate: " << md_.camera_q_.toRotationMatrix() << endl;
   // std::cout << "pos in proj: " << md_.camera_pos_ << std::endl;
-
+  //将深度图像投影到世界坐标系下，得到每个像素点对应的三维点云
   if (!mp_.use_depth_filter_) {
-    for (int v = 0; v < rows; v++) {
+    for (int v = 0; v < rows; v++) {//逐行处理每一个像素点和深度值
       row_ptr = md_.depth_image_.ptr<uint16_t>(v);
 
       for (int u = 0; u < cols; u++) {
@@ -519,11 +519,11 @@ void SDFMap::projectDepthImage() {
 
 void SDFMap::raycastProcess() {
   // if (md_.proj_points_.size() == 0)
-  if (md_.proj_points_cnt == 0) return;
+  if (md_.proj_points_cnt == 0) return;//如果没有深度图投影点，则直接返回
 
   ros::Time t1, t2;
 
-  md_.raycast_num_ += 1;
+  md_.raycast_num_ += 1;//这个raycast_num_是用来标记每次射线投影的次数，避免重复更新同一个voxel，是与深度图id向等的嘛？
 
   int vox_idx;
   double length;
@@ -546,20 +546,20 @@ void SDFMap::raycastProcess() {
 
     // set flag for projected point
 
-    if (!isInMap(pt_w)) {
+    if (!isInMap(pt_w)) {//如果投影点不在地图范围内，则将其投影到地图边界上
       pt_w = closetPointInMap(pt_w, md_.camera_pos_);
 
       length = (pt_w - md_.camera_pos_).norm();
-      if (length > mp_.max_ray_length_) {
+      if (length > mp_.max_ray_length_) {//如果超出最大射线长度，则将点投影到最大射线长度处
         pt_w = (pt_w - md_.camera_pos_) / length * mp_.max_ray_length_ + md_.camera_pos_;
       }
-      vox_idx = setCacheOccupancy(pt_w, 0);
+      vox_idx = setCacheOccupancy(pt_w, 0);//返回的是该voxel的一维度id
 
     } else {
       length = (pt_w - md_.camera_pos_).norm();
 
       if (length > mp_.max_ray_length_) {
-        pt_w = (pt_w - md_.camera_pos_) / length * mp_.max_ray_length_ + md_.camera_pos_;
+        pt_w = (pt_w - md_.camera_pos_) / length * mp_.max_ray_length_ + md_.camera_pos_;//最大射线长度出的点的坐标
         vox_idx = setCacheOccupancy(pt_w, 0);
       } else {
         vox_idx = setCacheOccupancy(pt_w, 1);
@@ -577,14 +577,14 @@ void SDFMap::raycastProcess() {
     // raycasting between camera center and point
 
     if (vox_idx != INVALID_IDX) {
-      if (md_.flag_rayend_[vox_idx] == md_.raycast_num_) {
+      if (md_.flag_rayend_[vox_idx] == md_.raycast_num_) {//表示它已经被其他射线更新过了，说明这个点已经被标记为占据点了，不需要再更新了
         continue;
       } else {
         md_.flag_rayend_[vox_idx] = md_.raycast_num_;
       }
     }
 
-    raycaster.setInput(pt_w / mp_.resolution_, md_.camera_pos_ / mp_.resolution_);
+    raycaster.setInput(pt_w / mp_.resolution_, md_.camera_pos_ / mp_.resolution_);//将点和相机位置都转换为体素坐标系下的坐标，进行射线投影
 
     while (raycaster.step(ray_pt)) {
       Eigen::Vector3d tmp = (ray_pt + half) * mp_.resolution_;
@@ -592,7 +592,7 @@ void SDFMap::raycastProcess() {
 
       // if (length < mp_.min_ray_length_) break;
 
-      vox_idx = setCacheOccupancy(tmp, 0);
+      vox_idx = setCacheOccupancy(tmp, 0);//射线扫过的点
 
       if (vox_idx != INVALID_IDX) {
         if (md_.flag_traverse_[vox_idx] == md_.raycast_num_) {
@@ -640,17 +640,17 @@ void SDFMap::raycastProcess() {
   while (!md_.cache_voxel_.empty()) {
 
     Eigen::Vector3i idx = md_.cache_voxel_.front();
-    int idx_ctns = toAddress(idx);
+    int idx_ctns = toAddress(idx);//拿第一个数据，然后将其从队列中删除，进行更新
     md_.cache_voxel_.pop();
 
     double log_odds_update =
         md_.count_hit_[idx_ctns] >= md_.count_hit_and_miss_[idx_ctns] - md_.count_hit_[idx_ctns] ?
         mp_.prob_hit_log_ :
-        mp_.prob_miss_log_;
+        mp_.prob_miss_log_;//如果击中次数大于等于未击中次数，则使用击中概率的对数形式，否则使用未击中概率的对数形式
 
     md_.count_hit_[idx_ctns] = md_.count_hit_and_miss_[idx_ctns] = 0;
 
-    if (log_odds_update >= 0 && md_.occupancy_buffer_[idx_ctns] >= mp_.clamp_max_log_) {
+    if (log_odds_update >= 0 && md_.occupancy_buffer_[idx_ctns] >= mp_.clamp_max_log_) {//是否超过最大阈值
       continue;
     } else if (log_odds_update <= 0 && md_.occupancy_buffer_[idx_ctns] <= mp_.clamp_min_log_) {
       md_.occupancy_buffer_[idx_ctns] = mp_.clamp_min_log_;
@@ -669,7 +669,7 @@ void SDFMap::raycastProcess() {
   }
 }
 
-Eigen::Vector3d SDFMap::closetPointInMap(const Eigen::Vector3d& pt, const Eigen::Vector3d& camera_pt) {
+Eigen::Vector3d SDFMap::closetPointInMap(const Eigen::Vector3d& pt, const Eigen::Vector3d& camera_pt) { //做激光涉嫌与地图边界的碰撞检测，返回最近的点，返回的是在地图边界上的点
   Eigen::Vector3d diff = pt - camera_pt;
   Eigen::Vector3d max_tc = mp_.map_max_boundary_ - camera_pt;
   Eigen::Vector3d min_tc = mp_.map_min_boundary_ - camera_pt;
@@ -698,13 +698,13 @@ void SDFMap::clearAndInflateLocalMap() {
   // Eigen::Vector3i(vec_margin, vec_margin, vec_margin);
 
   Eigen::Vector3i min_cut = md_.local_bound_min_ -
-      Eigen::Vector3i(mp_.local_map_margin_, mp_.local_map_margin_, mp_.local_map_margin_);
+      Eigen::Vector3i(mp_.local_map_margin_, mp_.local_map_margin_, mp_.local_map_margin_);//地图边缘余量
   Eigen::Vector3i max_cut = md_.local_bound_max_ +
       Eigen::Vector3i(mp_.local_map_margin_, mp_.local_map_margin_, mp_.local_map_margin_);
   boundIndex(min_cut);
   boundIndex(max_cut);
 
-  Eigen::Vector3i min_cut_m = min_cut - Eigen::Vector3i(vec_margin, vec_margin, vec_margin);
+  Eigen::Vector3i min_cut_m = min_cut - Eigen::Vector3i(vec_margin, vec_margin, vec_margin);//多处理一些边缘体素，避免出现空洞
   Eigen::Vector3i max_cut_m = max_cut + Eigen::Vector3i(vec_margin, vec_margin, vec_margin);
   boundIndex(min_cut_m);
   boundIndex(max_cut_m);
@@ -714,7 +714,7 @@ void SDFMap::clearAndInflateLocalMap() {
   for (int x = min_cut_m(0); x <= max_cut_m(0); ++x)
     for (int y = min_cut_m(1); y <= max_cut_m(1); ++y) {
 
-      for (int z = min_cut_m(2); z < min_cut(2); ++z) {
+      for (int z = min_cut_m(2); z < min_cut(2); ++z) {//清除局部地图边界之外的体素数据，z方向的两个平面之间的体素数据都清除掉，设置为未知状态
         int idx = toAddress(x, y, z);
         md_.occupancy_buffer_[idx] = mp_.clamp_min_log_ - mp_.unknown_flag_;
         md_.distance_buffer_all_[idx] = 10000;
@@ -780,7 +780,7 @@ void SDFMap::clearAndInflateLocalMap() {
       for (int z = md_.local_bound_min_(2); z <= md_.local_bound_max_(2); ++z) {
 
         if (md_.occupancy_buffer_[toAddress(x, y, z)] > mp_.min_occupancy_log_) {
-          inflatePoint(Eigen::Vector3i(x, y, z), inf_step, inf_pts);
+          inflatePoint(Eigen::Vector3i(x, y, z), inf_step, inf_pts);//将占据点周围的体素点都标记为占据点，进行膨胀处理，得到的inf_pts是一个vector，里面存储了所有需要膨胀的体素点的坐标
 
           for (int k = 0; k < (int)inf_pts.size(); ++k) {
             inf_pt = inf_pts[k];
@@ -795,7 +795,7 @@ void SDFMap::clearAndInflateLocalMap() {
       }
 
   // add virtual ceiling to limit flight height
-  if (mp_.virtual_ceil_height_ > -0.5) {
+  if (mp_.virtual_ceil_height_ > -0.5) {//阈值限定
     int ceil_id = floor((mp_.virtual_ceil_height_ - mp_.map_origin_(2)) * mp_.resolution_inv_);
     for (int x = md_.local_bound_min_(0); x <= md_.local_bound_max_(0); ++x)
       for (int y = md_.local_bound_min_(1); y <= md_.local_bound_max_(1); ++y) {
@@ -815,7 +815,7 @@ void SDFMap::visCallback(const ros::TimerEvent& /*event*/) {
 }
 
 void SDFMap::updateOccupancyCallback(const ros::TimerEvent& /*event*/) {
-  if (!md_.occ_need_update_) return;
+  if (!md_.occ_need_update_) return;//当来深度图像时，occ_need_update_被置为true，表示需要更新occupancy_buffer_，否则不更新
 
   /* update occupancy */
   ros::Time t1, t2;
@@ -824,7 +824,7 @@ void SDFMap::updateOccupancyCallback(const ros::TimerEvent& /*event*/) {
   projectDepthImage();
   raycastProcess();
 
-  if (md_.local_updated_) clearAndInflateLocalMap();
+  if (md_.local_updated_) clearAndInflateLocalMap();//只有有深度图时，local_updated_才会被置为true，表示需要更新局部地图，否则不更新
 
   t2 = ros::Time::now();
 

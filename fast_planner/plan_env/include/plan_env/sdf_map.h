@@ -173,7 +173,7 @@ struct MappingData {
 
   /// @brief 占据概率缓冲区（对数形式）
   /// @details 每个体素存储log-odds形式的占据概率正值
-  std::vector<double> occupancy_buffer_;
+  std::vector<double> occupancy_buffer_;//占据概率缓冲区，存储每个体素的占据概率的对数形式（log-odds），用于贝叶斯更新
   
   /// @brief 占据概率负值缓冲区
   std::vector<char> occupancy_buffer_neg;

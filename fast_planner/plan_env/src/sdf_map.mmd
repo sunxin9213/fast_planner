@@ -1,0 +1,23 @@
+flowchart TB
+    A["initMap"] --> A1["加载参数"] & A2["初始化 occupancy/distance 缓冲区"] & A3["创建订阅者与定时器"] & A4["注册回调函数"]
+    A4 --> B["depthPoseCallback / depthOdomCallback"] & C["cloudCallback"] & D["updateOccupancyCallback"] & E["updateESDFCallback"]
+    B --> B1["读取深度图"] & B2["读取相机位姿"] & B3["更新 md_.depth_image_ / md_.camera_pos_ / md_.camera_q_"]
+    B -.-> B4["设置 occ_need_update = true"]
+    C --> C1["读取点云"] & C2["判断是否在局部更新范围内"] & C3["对点进行膨胀 inflate"] & C4["更新 local_bound_min/max"]
+    C -.-> C5["设置 esdf_need_update = true"]
+    B4 -.-> D
+    C5 -.-> E
+    D --> D1["projectDepthImage"] & D2["raycastProcess"] & D3["clearAndInflateLocalMap"]
+    D1 --> D1a["把深度像素投影到世界坐标"] & D1b["生成 proj_points_"] & D1c["更新 last_camera_pose"]
+    D2 --> D2a["遍历 proj_points_"] & D2b["设置缓存点 occupied/free"] & D2c["执行 raycast"] & D2d["更新 local_bound_min/max"] & D2e["更新 occupancy_buffer_"]
+    D3 --> D3a["清理超出局部范围的数据"] & D3b["inflatePoint 膨胀障碍物"] & D3c["添加虚拟天花板"]
+    E --> E1["updateESDF3d"]
+    E1 --> E2["fillESDF 计算正距离"] & E3["计算负距离"] & E4["融合得到 distance_buffer_all_"]
+    E4 --> F["publishMap / publishMapInflate / publishUnknown / publishESDF"]
+    F --> G["规划器读取 SDF / 距离场"]
+    D2 -. 只有有深度图时才为true .-> n1["local_updated_"]
+    n1 -.-> D3
+    D -.-> C5
+
+    n1@{ shape: rect}
+    style n1 color:#000000

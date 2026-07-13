@@ -65,14 +65,14 @@ void FastPlannerManager::initPlanModules(ros::NodeHandle& nh) {
     geo_path_finder_->init();
   }
 
-  if (use_kinodynamic_path) {
+  if (use_kinodynamic_path) {//true
     kino_path_finder_.reset(new KinodynamicAstar);
     kino_path_finder_->setParam(nh);
     kino_path_finder_->setEnvironment(edt_environment_);
     kino_path_finder_->init();
   }
 
-  if (use_optimization) {
+  if (use_optimization) {//true
     bspline_optimizers_.resize(10);
     for (int i = 0; i < 10; ++i) {
       bspline_optimizers_[i].reset(new BsplineOptimizer);

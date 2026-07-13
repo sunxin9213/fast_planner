@@ -1,21 +1,33 @@
 <launch>
+  <!--
+    这个 launch 文件用于启动 Fast-Planner 的 kinodynamic 规划节点。
+    它把外部传入的地图尺寸、传感器话题、相机内参、速度/加速度限制、航点等参数
+    统一注入到 plan_manage/fast_planner_node 中，构成一套完整的局部规划流程。
+  -->
+
+  <!-- ========================= 1) 外部输入参数定义 ========================= -->
+  <!-- 地图体素尺寸（单位：米） -->
   <arg name="map_size_x_"/>
   <arg name="map_size_y_"/>
   <arg name="map_size_z_"/>
 
+  <!-- 传感器与状态输入话题 -->
   <arg name="odometry_topic"/>
   <arg name="camera_pose_topic"/>
   <arg name="depth_topic"/>
   <arg name="cloud_topic"/>
 
+  <!-- 相机内参，用于将深度图反投影为 3D 点 -->
   <arg name="cx"/>
   <arg name="cy"/>
   <arg name="fx"/>
   <arg name="fy"/>
 
+  <!-- 运动学/动力学约束 -->
   <arg name="max_vel"/>
   <arg name="max_acc"/>
 
+  <!-- 任务航点参数 -->
   <arg name="point_num"/>
   <arg name="point0_x"/>
   <arg name="point0_y"/>
@@ -27,24 +39,30 @@
   <arg name="point2_y"/>
   <arg name="point2_z"/>
 
+  <!-- 飞行模式类型（例如：定点飞行、巡航等） -->
   <arg name="flight_type"/>
 
+  <!-- ========================= 2) 启动规划节点 ========================= -->
   <!-- main node -->
   <node pkg="plan_manage" name="fast_planner_node" type="fast_planner_node" output="screen">
+    <!-- 将外部输入话题重映射到 Fast-Planner 期望的 topic 名称 -->
     <remap from="/odom_world" to="$(arg odometry_topic)"/>
     <remap from="/sdf_map/odom" to="$(arg odometry_topic)"/>
     <remap from="/sdf_map/cloud" to="$(arg cloud_topic)"/>
-    <remap from = "/sdf_map/pose"   to = "$(arg camera_pose_topic)"/> 
-    <remap from = "/sdf_map/depth" to = "$(arg depth_topic)"/>
+    <remap from="/sdf_map/pose" to="$(arg camera_pose_topic)"/>
+    <remap from="/sdf_map/depth" to="$(arg depth_topic)"/>
 
-    <!-- replanning method -->
+    <!-- ===================== 2.1) 重规划方法选择 ===================== -->
+    <!-- planner=1 表示使用 kinodynamic 规划器分支 -->
     <param name="planner_node/planner" value="1" type="int"/>
 
-    <!-- planning fsm -->
+    <!-- ===================== 2.2) 状态机（FSM）参数 ===================== -->
+    <!-- 飞行模式和重规划阈值 -->
     <param name="fsm/flight_type" value="$(arg flight_type)" type="int"/>
     <param name="fsm/thresh_replan" value="1.5" type="double"/>
     <param name="fsm/thresh_no_replan" value="2.0" type="double"/>
 
+    <!-- 任务航点 -->
     <param name="fsm/waypoint_num" value="$(arg point_num)" type="int"/>
     <param name="fsm/waypoint0_x" value="$(arg point0_x)" type="double"/>
     <param name="fsm/waypoint0_y" value="$(arg point0_y)" type="double"/>
@@ -56,48 +74,59 @@
     <param name="fsm/waypoint2_y" value="$(arg point2_y)" type="double"/>
     <param name="fsm/waypoint2_z" value="$(arg point2_z)" type="double"/>
 
-    <param name="sdf_map/resolution"      value="0.1" /> 
-    <param name="sdf_map/map_size_x"   value="$(arg map_size_x_)" /> 
-    <param name="sdf_map/map_size_y"   value="$(arg map_size_y_)" /> 
-    <param name="sdf_map/map_size_z"   value="$(arg map_size_z_)" /> 
-    <param name="sdf_map/local_update_range_x"  value="5.5" /> 
-    <param name="sdf_map/local_update_range_y"  value="5.5" /> 
-    <param name="sdf_map/local_update_range_z"  value="4.5" /> 
-    <param name="sdf_map/obstacles_inflation"     value="0.099" /> 
-    <param name="sdf_map/local_bound_inflate"    value="0.0"/>
+    <!-- ===================== 2.3) SDF 地图参数 ===================== -->
+    <!-- 地图分辨率与尺寸 -->
+    <param name="sdf_map/resolution" value="0.1"/>
+    <param name="sdf_map/map_size_x" value="$(arg map_size_x_)"/>
+    <param name="sdf_map/map_size_y" value="$(arg map_size_y_)"/>
+    <param name="sdf_map/map_size_z" value="$(arg map_size_z_)"/>
+
+    <!-- 局部地图更新范围：只在机器人附近局部更新地图 -->
+    <param name="sdf_map/local_update_range_x" value="5.5"/>
+    <param name="sdf_map/local_update_range_y" value="5.5"/>
+    <param name="sdf_map/local_update_range_z" value="4.5"/>
+
+    <!-- 障碍物膨胀与局部边界设置 -->
+    <param name="sdf_map/obstacles_inflation" value="0.099"/>
+    <param name="sdf_map/local_bound_inflate" value="0.0"/>
     <param name="sdf_map/local_map_margin" value="50"/>
-    <param name="sdf_map/ground_height"        value="-1.0"/>
-    <!-- camera parameter -->
+    <param name="sdf_map/ground_height" value="-1.0"/>
+
+    <!-- 相机内参，用于深度图反投影 -->
     <param name="sdf_map/cx" value="$(arg cx)"/>
     <param name="sdf_map/cy" value="$(arg cy)"/>
     <param name="sdf_map/fx" value="$(arg fx)"/>
     <param name="sdf_map/fy" value="$(arg fy)"/>
-    <!-- depth filter -->
+
+    <!-- 深度图滤波参数 -->
     <param name="sdf_map/use_depth_filter" value="true"/>
     <param name="sdf_map/depth_filter_tolerance" value="0.15"/>
-    <param name="sdf_map/depth_filter_maxdist"   value="5.0"/>
-    <param name="sdf_map/depth_filter_mindist"   value="0.2"/>
-    <param name="sdf_map/depth_filter_margin"    value="2"/>
+    <param name="sdf_map/depth_filter_maxdist" value="5.0"/>
+    <param name="sdf_map/depth_filter_mindist" value="0.2"/>
+    <param name="sdf_map/depth_filter_margin" value="2"/>
     <param name="sdf_map/k_depth_scaling_factor" value="1000.0"/>
     <param name="sdf_map/skip_pixel" value="2"/>
-    <!-- local fusion -->
-    <param name="sdf_map/p_hit"  value="0.65"/>
+
+    <!-- 局部融合 / 占据概率更新模型 -->
+    <param name="sdf_map/p_hit" value="0.65"/>
     <param name="sdf_map/p_miss" value="0.35"/>
-    <param name="sdf_map/p_min"  value="0.12"/>
-    <param name="sdf_map/p_max"  value="0.90"/>
-    <param name="sdf_map/p_occ"  value="0.80"/>
+    <param name="sdf_map/p_min" value="0.12"/>
+    <param name="sdf_map/p_max" value="0.90"/>
+    <param name="sdf_map/p_occ" value="0.80"/>
     <param name="sdf_map/min_ray_length" value="0.5"/>
     <param name="sdf_map/max_ray_length" value="4.5"/>
 
+    <!-- ESDF 可视化与高度限制 -->
     <param name="sdf_map/esdf_slice_height" value="0.3"/>
-    <param name="sdf_map/visualization_truncate_height"   value="2.49"/>
-    <param name="sdf_map/virtual_ceil_height"   value="2.5"/>
-    <param name="sdf_map/show_occ_time"  value="false"/>
+    <param name="sdf_map/visualization_truncate_height" value="2.49"/>
+    <param name="sdf_map/virtual_ceil_height" value="2.5"/>
+    <param name="sdf_map/show_occ_time" value="false"/>
     <param name="sdf_map/show_esdf_time" value="false"/>
-    <param name="sdf_map/pose_type"     value="1"/>  
-    <param name="sdf_map/frame_id"      value="world"/>
+    <param name="sdf_map/pose_type" value="1"/>
+    <param name="sdf_map/frame_id" value="world"/>
 
-  <!-- planner manager -->
+    <!-- ===================== 2.4) 规划管理器参数 ===================== -->
+    <!-- 速度、加速度、抖动与环境动态性约束 -->
     <param name="manager/max_vel" value="$(arg max_vel)" type="double"/>
     <param name="manager/max_acc" value="$(arg max_acc)" type="double"/>
     <param name="manager/max_jerk" value="4" type="double"/>
@@ -106,12 +135,14 @@
     <param name="manager/clearance_threshold" value="0.2" type="double"/>
     <param name="manager/control_points_distance" value="0.5" type="double"/>
 
+    <!-- 启用/禁用不同规划模式 -->
     <param name="manager/use_geometric_path" value="false" type="bool"/>
     <param name="manager/use_kinodynamic_path" value="true" type="bool"/>
     <param name="manager/use_topo_path" value="false" type="bool"/>
     <param name="manager/use_optimization" value="true" type="bool"/>
 
-  <!-- kinodynamic path searching -->
+    <!-- ===================== 2.5) 轨迹搜索参数 ===================== -->
+    <!-- kinodynamic path searching -->
     <param name="search/max_tau" value="0.6" type="double"/>
     <param name="search/init_max_tau" value="0.8" type="double"/>
     <param name="search/max_vel" value="$(arg max_vel)" type="double"/>
@@ -125,7 +156,8 @@
     <param name="search/allocate_num" value="100000" type="int"/>
     <param name="search/check_num" value="5" type="int"/>
 
-  <!-- trajectory optimization -->
+    <!-- ===================== 2.6) 轨迹优化参数 ===================== -->
+    <!-- trajectory optimization -->
     <param name="optimization/lambda1" value="10.0" type="double"/>
     <param name="optimization/lambda2" value="5.0" type="double"/>
     <param name="optimization/lambda3" value="0.00001" type="double"/>
@@ -150,6 +182,7 @@
 
     <param name="optimization/order" value="3" type="int"/>
 
+    <!-- ===================== 2.7) B样条轨迹约束 ===================== -->
     <param name="bspline/limit_vel" value="$(arg max_vel)" type="double"/>
     <param name="bspline/limit_acc" value="$(arg max_acc)" type="double"/>
     <param name="bspline/limit_ratio" value="1.1" type="double"/>

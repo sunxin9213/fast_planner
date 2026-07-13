@@ -107,7 +107,7 @@ int Astar::search(Eigen::Vector3d start_pt, Eigen::Vector3d end_pt, bool dynamic
     bool reach_end = abs(cur_node->index(0) - end_index(0)) <= 1 &&
         abs(cur_node->index(1) - end_index(1)) <= 1 && abs(cur_node->index(2) - end_index(2)) <= 1;
 
-    if (reach_end) {
+    if (reach_end) {//如果已经到达重点附近，要回溯
       // 成功到达终点，通过回溯父指针获取完整路径
       terminate_node = cur_node;
       retrievePath(terminate_node);
@@ -119,7 +119,7 @@ int Astar::search(Eigen::Vector3d start_pt, Eigen::Vector3d end_pt, bool dynamic
     /* ---------- 弹出节点并加入关闭集 ---------- */
     // 当前节点已处理完毕，从开放集移除并加入关闭集
     open_set_.pop();
-    cur_node->node_state = IN_CLOSE_SET;
+    cur_node->node_state = IN_CLOSE_SET;//表示当前节点已经被扩展过了，加入关闭集
     iter_num_ += 1;  // 统计迭代次数
 
     /* ---------- 邻居节点扩展初始化 ---------- */
@@ -161,7 +161,7 @@ int Astar::search(Eigen::Vector3d start_pt, Eigen::Vector3d end_pt, bool dynamic
           NodePtr pro_node =
               dynamic ? expanded_nodes_.find(pro_id, pro_t_id) : expanded_nodes_.find(pro_id);
 
-          if (pro_node != NULL && pro_node->node_state == IN_CLOSE_SET) {
+          if (pro_node != NULL && pro_node->node_state == IN_CLOSE_SET) {//如果当前这个节点已经在关闭集中，说明已经扩展过了，就不需要再扩展了
             continue;  // 已扩展过的节点，跳过
           }
 
@@ -169,7 +169,7 @@ int Astar::search(Eigen::Vector3d start_pt, Eigen::Vector3d end_pt, bool dynamic
           // 使用欧几里得距离场(EDT)评估与障碍物的距离
           // EDT可以从SDF(有符号距离场)快速查询
           // dist > margin_ 表示在障碍物安全距离之外
-          double dist = edt_environment_->evaluateCoarseEDT(pro_pos, -1.0);
+          double dist = edt_environment_->evaluateCoarseEDT(pro_pos, -1.0);//查询点到最近的障碍物的距离
           if (dist <= margin_) {
             continue;  // 距离障碍物太近，不安全
           }
@@ -185,9 +185,9 @@ int Astar::search(Eigen::Vector3d start_pt, Eigen::Vector3d end_pt, bool dynamic
           tmp_f_score = tmp_g_score + lambda_heu_ * getEuclHeu(pro_pos, end_pt);
 
           // 根据节点状态进行处理
-          if (pro_node == NULL) {
+          if (pro_node == NULL) {// 新发现的节点，从节点池中分配
             // 情况1: 新发现的节点，从池中分配
-            pro_node = path_node_pool_[use_node_num_];
+            pro_node = path_node_pool_[use_node_num_];//这个变量是指针
             pro_node->index = pro_id;
             pro_node->position = pro_pos;
             pro_node->f_score = tmp_f_score;

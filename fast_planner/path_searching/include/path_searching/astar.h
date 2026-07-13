@@ -74,6 +74,26 @@ public:
   }
 };
 
+//int类型的Eigen矩阵默认是没有hash函数的，所以需要自己定义一个hash函数
+//比 std::vector<std::vector<std::vector<>>>快得多，内存也更省
+
+// struct matrix_hash {
+//   std::size_t operator()(const Eigen::Vector3i& v) const noexcept {
+//     std::size_t seed = 0;
+//     for (int i = 0; i < 3; ++i) {
+//       seed ^= std::hash<int>{}(v[i])
+//             + 0x9e3779b9
+//             + (seed << 6)
+//             + (seed >> 2);
+//     }
+//     return seed;
+//   }
+// };
+
+//1. 浮点 Vector 不适合直接当 key，因为存在精度问题，容易导致哈希冲突。2. 如果要使用浮点 Vector 作为 key，需要先将其转换为整数索引（例如通过网格化），然后再使用整数索引作为 key。
+
+std::unordered_map<Eigen::Vector3i, NodePtr, matrix_hash> data_3d_;
+
 template <typename T>
 struct matrix_hash0 : std::unary_function<T, size_t> {
   std::size_t operator()(T const& matrix) const {
@@ -124,7 +144,7 @@ private:
   /* ---------- main data structure ---------- */
   vector<NodePtr> path_node_pool_;
   int use_node_num_, iter_num_;
-  NodeHashTable0 expanded_nodes_;
+  NodeHashTable0 expanded_nodes_;//需要继续扩展的node集合
   std::priority_queue<NodePtr, std::vector<NodePtr>, NodeComparator0> open_set_;
   std::vector<NodePtr> path_nodes_;
 

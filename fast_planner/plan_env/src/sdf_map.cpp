@@ -259,13 +259,20 @@ template <typename F_get_val, typename F_set_val>
 void SDFMap::fillESDF(F_get_val f_get_val, F_set_val f_set_val, int start, int end, int dim) {
   int v[mp_.map_voxel_num_(dim)];
   double z[mp_.map_voxel_num_(dim) + 1];
+  //每一个障碍物栅格处会有一条对应的抛物线，抛物线的顶点在障碍物栅格处，抛物线的y值表示距离障碍物的平方距离，抛物线的x值表示体素索引。想要求取的东西是在所有抛物线的下包络线上操作的。
+  //z数组表示下包络线中，当前抛物线的左侧边界值，v表示当前抛物线的顶点索引。z数组的长度比v数组多1。
+  //z[k]表示第k条抛物线的左侧边界，z[k+1]表示第k条抛物线的右侧边界。v[k]表示第k条抛物线的顶点索引。z数组的最后一个元素z[k+1]被初始化为正无穷大，表示最后一条抛物线的右侧边界是无穷大。
+  //这个函数的功能是求取每个位置的所对应的抛物线所对应的下包络线的值，也就是求取每个位置的距离障碍物的平方距离。这个函数的时间复杂度是O(n)，其中n是体素索引的数量。
 
+  //第一步求的是“到最近占据体素的正向距离”
+  //第二步求的是“到最近 free space 的负向距离”
+  
   int k = start;
   v[start] = start;
   z[start] = -std::numeric_limits<double>::max();
   z[start + 1] = std::numeric_limits<double>::max();
 
-  for (int q = start + 1; q <= end; q++) {
+  for (int q = start + 1; q <= end; q++) {//q是指定维度的体素索引，start和end是指定维度的起始和结束索引
     k++;
     double s;
 
@@ -283,7 +290,7 @@ void SDFMap::fillESDF(F_get_val f_get_val, F_set_val f_set_val, int start, int e
 
   k = start;
 
-  for (int q = start; q <= end; q++) {
+  for (int q = start; q <= end; q++) {//根据当前维护好的包络线，真正计算每个点的最小值
     while (z[k + 1] < q) k++;
     double val = (q - v[k]) * (q - v[k]) + f_get_val(v[k]);
     f_set_val(q, val);
@@ -296,13 +303,13 @@ void SDFMap::updateESDF3d() {
 
   /* ========== compute positive DT ========== */
 
-  for (int x = min_esdf[0]; x <= max_esdf[0]; x++) {
+  for (int x = min_esdf[0]; x <= max_esdf[0]; x++) {//计算每个栅格到最近障碍物的距离
     for (int y = min_esdf[1]; y <= max_esdf[1]; y++) {
       fillESDF(
           [&](int z) {
             return md_.occupancy_buffer_inflate_[toAddress(x, y, z)] == 1 ?
                 0 :
-                std::numeric_limits<double>::max();
+                std::numeric_limits<double>::max();//1表示被点云膨胀过了
           },
           [&](int z, double val) { md_.tmp_buffer1_[toAddress(x, y, z)] = val; }, min_esdf[2],
           max_esdf[2], 2);
@@ -330,7 +337,7 @@ void SDFMap::updateESDF3d() {
   }
 
   /* ========== compute negative distance ========== */
-  for (int x = min_esdf(0); x <= max_esdf(0); ++x)
+  for (int x = min_esdf(0); x <= max_esdf(0); ++x)//做转码
     for (int y = min_esdf(1); y <= max_esdf(1); ++y)
       for (int z = min_esdf(2); z <= max_esdf(2); ++z) {
 
@@ -347,14 +354,14 @@ void SDFMap::updateESDF3d() {
 
   ros::Time t1, t2;
 
-  for (int x = min_esdf[0]; x <= max_esdf[0]; x++) {
+  for (int x = min_esdf[0]; x <= max_esdf[0]; x++) {//计算每个栅格到最近空闲空间的距离
     for (int y = min_esdf[1]; y <= max_esdf[1]; y++) {
       fillESDF(
           [&](int z) {
             return md_.occupancy_buffer_neg[x * mp_.map_voxel_num_(1) * mp_.map_voxel_num_(2) +
                                             y * mp_.map_voxel_num_(2) + z] == 1 ?
                 0 :
-                std::numeric_limits<double>::max();
+                std::numeric_limits<double>::max();//前面进行了反转，这里 == 1表示是free空间，== 0表示是障碍物
           },
           [&](int z, double val) { md_.tmp_buffer1_[toAddress(x, y, z)] = val; }, min_esdf[2],
           max_esdf[2], 2);
@@ -378,9 +385,13 @@ void SDFMap::updateESDF3d() {
                min_esdf[0], max_esdf[0], 0);
     }
   }
+  // 更新后的整个 distance_buffer_all_ 其实是：
+  // 对于障碍物外侧：给出正向距离
+  // 对于障碍物内部/空隙侧：给出负向距离
+  // 这样就得到一个“有符号距离场”
 
   /* ========== combine pos and neg DT ========== */
-  for (int x = min_esdf(0); x <= max_esdf(0); ++x)
+  for (int x = min_esdf(0); x <= max_esdf(0); ++x)//合并，障碍物以外的栅格距离表示到最近障碍物的距离，障碍物栅格表示到最近free空间的距离
     for (int y = min_esdf(1); y <= max_esdf(1); ++y)
       for (int z = min_esdf(2); z <= max_esdf(2); ++z) {
 
@@ -822,7 +833,7 @@ void SDFMap::updateOccupancyCallback(const ros::TimerEvent& /*event*/) {
   t1 = ros::Time::now();
 
   projectDepthImage();
-  raycastProcess();
+  raycastProcess();//沿着激光点出射方向，更新概率栅格的概率值
 
   if (md_.local_updated_) clearAndInflateLocalMap();//只有有深度图时，local_updated_才会被置为true，表示需要更新局部地图，否则不更新
 

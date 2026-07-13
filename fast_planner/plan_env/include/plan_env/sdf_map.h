@@ -185,13 +185,13 @@ struct MappingData {
   std::vector<double> distance_buffer_;//默认值为10000，表示未知区域
   
   /// @brief ESDF距离场缓冲区（负向，用于未知区域）
-  std::vector<double> distance_buffer_neg_;
+  std::vector<double> distance_buffer_neg_;//每个栅格到距离最近的 free space 的距离，默认值为10000，表示未知区域
   
   /// @brief 完整距离场（正负合并）
   std::vector<double> distance_buffer_all_;
   
   /// @brief 临时缓冲区（用于ESDF计算）
-  std::vector<double> tmp_buffer1_;
+  std::vector<double> tmp_buffer1_;//存储的esdf计算过程中每个体素的距离平方值，默认值为10000，表示未知区域
   std::vector<double> tmp_buffer2_;
 
   // 相机位置和姿态数据

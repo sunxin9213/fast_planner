@@ -89,7 +89,7 @@ int KinodynamicAstar::search(Eigen::Vector3d start_pt, Eigen::Vector3d start_v, 
   end_index = posToIndex(end_pt);
   
   // f(n) = g(n) + h(n), 其中h(n)是基于动力学的启发式估计
-  cur_node->f_score = lambda_heu_ * estimateHeuristic(cur_node->state, end_state, time_to_goal);
+  cur_node->f_score = lambda_heu_ * estimateHeuristic(cur_node->state, end_state, time_to_goal);//计算代价的
   cur_node->node_state = IN_OPEN_SET;
   open_set_.push(cur_node);
   use_node_num_ += 1;
@@ -131,7 +131,7 @@ int KinodynamicAstar::search(Eigen::Vector3d start_pt, Eigen::Vector3d start_v, 
       {
         // Check whether shot traj exist
         estimateHeuristic(cur_node->state, end_state, time_to_goal);
-        computeShotTraj(cur_node->state, end_state, time_to_goal);
+        computeShotTraj(cur_node->state, end_state, time_to_goal);//computeShotTraj() 不是整条轨迹的主生成器，而是“终点附近的一段补丁”。
         if (init_search)
           ROS_ERROR("Shot in first search loop!");
       }
@@ -182,7 +182,7 @@ int KinodynamicAstar::search(Eigen::Vector3d start_pt, Eigen::Vector3d start_v, 
     vector<double> durations;
     
     // 采样控制输入(加速度)和持续时间
-    if (init_search)
+    if (init_search)//两种搜索模式:首次搜索先走这里，如果结果为NO_PATH，下一次搜索就走else分支
     {
       // 首次搜索:使用起点加速度，采样较短的时间间隔
       inputs.push_back(start_acc_);
@@ -369,16 +369,16 @@ int KinodynamicAstar::search(Eigen::Vector3d start_pt, Eigen::Vector3d start_v, 
 */
 void KinodynamicAstar::retrievePath(PathNodePtr end_node)
 {
-PathNodePtr cur_node = end_node;
-path_nodes_.push_back(cur_node);
-
-while (cur_node->parent != NULL)
-{
-  cur_node = cur_node->parent;
+  PathNodePtr cur_node = end_node;
   path_nodes_.push_back(cur_node);
-}
 
-reverse(path_nodes_.begin(), path_nodes_.end());
+  while (cur_node->parent != NULL)
+  {
+    cur_node = cur_node->parent;
+    path_nodes_.push_back(cur_node);
+  }
+
+  reverse(path_nodes_.begin(), path_nodes_.end());
 }
 
 /**
@@ -395,77 +395,79 @@ reverse(path_nodes_.begin(), path_nodes_.end());
 * @param time_to_goal 到达时间
 * @return bool 是否成功(轨迹是否满足约束)
 */
-bool KinodynamicAstar::computeShotTraj(Eigen::VectorXd state1, Eigen::VectorXd state2, double time_to_goal)
+//剪枝是否严重，是和环境强相关的，而且即使发生了，最多是多搜一些节点、慢一点，但是可接受的。
+//这个函数被重复定义了
+bool KinodynamicAstar::computeShotTraj(Eigen::VectorXd state1, Eigen::VectorXd state2, double time_to_goal) 
 {
-/* 获取系数矩阵 */
-const Vector3d p0 = state1.head(3);
-const Vector3d dp = state2.head(3) - p0;
-const Vector3d v0 = state1.segment(3, 3);
-const Vector3d v1 = state2.segment(3, 3);
-const Vector3d dv = v1 - v0;
-double t_d = time_to_goal;
-MatrixXd coef(3, 4);
-end_vel_ = v1;
+  /* 获取系数矩阵 */
+  const Vector3d p0 = state1.head(3);
+  const Vector3d dp = state2.head(3) - p0;
+  const Vector3d v0 = state1.segment(3, 3);
+  const Vector3d v1 = state2.segment(3, 3);
+  const Vector3d dv = v1 - v0;
+  double t_d = time_to_goal;
+  MatrixXd coef(3, 4);//3行4列，存储三次多项式的系数，每一行对应单个xyz轴
+  end_vel_ = v1;
 
-// 根据边界条件求解三次多项式系数
-// a = 1/6 * (-12*(dp - v0*t)/t³ + 6*dv/t²)
-// b = 1/2 * (6*(dp - v0*t)/t² - 2*dv/t)
-Vector3d a = 1.0 / 6.0 * (-12.0 / (t_d * t_d * t_d) * (dp - v0 * t_d) + 6 / (t_d * t_d) * dv);
-Vector3d b = 0.5 * (6.0 / (t_d * t_d) * (dp - v0 * t_d) - 2 / t_d * dv);
-Vector3d c = v0;
-Vector3d d = p0;
+  // 根据边界条件求解三次多项式系数
+  // a = 1/6 * (-12*(dp - v0*t)/t³ + 6*dv/t²)
+  // b = 1/2 * (6*(dp - v0*t)/t² - 2*dv/t)
+  Vector3d a = 1.0 / 6.0 * (-12.0 / (t_d * t_d * t_d) * (dp - v0 * t_d) + 6 / (t_d * t_d) * dv);
+  Vector3d b = 0.5 * (6.0 / (t_d * t_d) * (dp - v0 * t_d) - 2 / t_d * dv);
+  Vector3d c = v0;
+  Vector3d d = p0;
 
-// 1/6 * alpha * t^3 + 1/2 * beta * t^2 + v0
-// a*t^3 + b*t^2 + v0*t + p0
-coef.col(3) = a, coef.col(2) = b, coef.col(1) = c, coef.col(0) = d;
+  // 1/6 * alpha * t^3 + 1/2 * beta * t^2 + v0
+  // a*t^3 + b*t^2 + v0*t + p0
+  coef.col(3) = a, coef.col(2) = b, coef.col(1) = c, coef.col(0) = d;
 
-Vector3d coord, vel, acc;
-VectorXd poly1d, t, polyv, polya;
-Vector3i index;
+  Vector3d coord, vel, acc;
+  VectorXd poly1d, t, polyv, polya;
+  Vector3i index;
 
-// 速度/加速度矩阵
-Eigen::MatrixXd Tm(4, 4);
-Tm << 0, 1, 0, 0, 0, 0, 2, 0, 0, 0, 0, 3, 0, 0, 0, 0;
+  // 速度/加速度矩阵
+  Eigen::MatrixXd Tm(4, 4);
+  Tm << 0, 1, 0, 0, 0, 0, 2, 0, 0, 0, 0, 3, 0, 0, 0, 0;
 
-/* 轨迹前向检查 */
-double t_delta = t_d / 10;
-for (double time = t_delta; time <= t_d; time += t_delta)
-{
-  t = VectorXd::Zero(4);
-  for (int j = 0; j < 4; j++)
-    t(j) = pow(time, j);
-
-  for (int dim = 0; dim < 3; dim++)
+  /* 轨迹前向检查 */
+  double t_delta = t_d / 10;
+  for (double time = t_delta; time <= t_d; time += t_delta)
   {
-    poly1d = coef.row(dim);
-    coord(dim) = poly1d.dot(t);
-    vel(dim) = (Tm * poly1d).dot(t);
-    acc(dim) = (Tm * Tm * poly1d).dot(t);
+    t = VectorXd::Zero(4);
+    for (int j = 0; j < 4; j++)//t的0次方到3次方
+      t(j) = pow(time, j);
 
-    // 检查速度/加速度约束
-    if (fabs(vel(dim)) > max_vel_ || fabs(acc(dim)) > max_acc_)
+    for (int dim = 0; dim < 3; dim++)//计算的是三个轴分别的坐标、速度、加速度，
     {
-      // 可行，允许继续
+      poly1d = coef.row(dim);//每个维度的多项式系数
+      coord(dim) = poly1d.dot(t);//计算位置
+      vel(dim) = (Tm * poly1d).dot(t);//poly1d本身是行向量，这里自动转置为列向量，Tm是4x4矩阵，poly1d是4x1列向量，结果是4x1列向量，再点乘t(4x1)得到标量，即速度
+      acc(dim) = (Tm * Tm * poly1d).dot(t);
+
+      // 检查速度/加速度约束
+      if (fabs(vel(dim)) > max_vel_ || fabs(acc(dim)) > max_acc_)
+      {
+        // 可行，允许继续
+      }
+    }
+
+    // 检查地图边界
+    if (coord(0) < origin_(0) || coord(0) >= map_size_3d_(0) || coord(1) < origin_(1) || coord(1) >= map_size_3d_(1) ||
+        coord(2) < origin_(2) || coord(2) >= map_size_3d_(2))
+    {
+      return false;
+    }
+
+    // 检查障碍物碰撞
+    if (edt_environment_->sdf_map_->getInflateOccupancy(coord) == 1)
+    {
+      return false;
     }
   }
-
-  // 检查地图边界
-  if (coord(0) < origin_(0) || coord(0) >= map_size_3d_(0) || coord(1) < origin_(1) || coord(1) >= map_size_3d_(1) ||
-      coord(2) < origin_(2) || coord(2) >= map_size_3d_(2))
-  {
-    return false;
-  }
-
-  // 检查障碍物碰撞
-  if (edt_environment_->sdf_map_->getInflateOccupancy(coord) == 1)
-  {
-    return false;
-  }
-}
-coef_shot_ = coef;
-t_shot_ = t_d;
-is_shot_succ_ = true;
-return true;
+  coef_shot_ = coef;
+  t_shot_ = t_d;
+  is_shot_succ_ = true;
+  return true;
 }
 
 /**
@@ -526,11 +528,11 @@ double KinodynamicAstar::estimateHeuristic(Eigen::VectorXd x1, Eigen::VectorXd x
   const Vector3d v1 = x2.segment(3, 3);  // 目标速度
 
   // 四元数方程系数，从最优控制理论推导得到
-  double c1 = -36 * dp.dot(dp);
+  double c1 = -36 * dp.dot(dp);//这几个系数是根据最优控制理论推导得到的，用于求解时间最优控制问题的四元数方程，Minimum Jerk
   double c2 = 24 * (v0 + v1).dot(dp);
   double c3 = -4 * (v0.dot(v0) + v0.dot(v1) + v1.dot(v1));
   double c4 = 0;
-  double c5 = w_time_;
+  double c5 = w_time_;//时间代价权重
 
   // 求解四元数方程得到候选时间点
   std::vector<double> ts = quartic(c5, c4, c3, c2, c1);
@@ -798,7 +800,7 @@ void KinodynamicAstar::reset()
   has_path_ = false;
 }
 
-std::vector<Eigen::Vector3d> KinodynamicAstar::getKinoTraj(double delta_t)
+std::vector<Eigen::Vector3d> KinodynamicAstar::getKinoTraj(double delta_t)//仅仅作为显示
 {
   vector<Vector3d> state_list;
 
@@ -815,7 +817,7 @@ std::vector<Eigen::Vector3d> KinodynamicAstar::getKinoTraj(double delta_t)
     for (double t = duration; t >= -1e-5; t -= delta_t)
     {
       stateTransit(x0, xt, ut, t);
-      state_list.push_back(xt.head(3));
+      state_list.push_back(xt.head(3));//得到的是时间上靠近终点的状态，后续会反转
     }
     node = node->parent;
   }
@@ -844,16 +846,16 @@ std::vector<Eigen::Vector3d> KinodynamicAstar::getKinoTraj(double delta_t)
 }
 
 void KinodynamicAstar::getSamples(double& ts, vector<Eigen::Vector3d>& point_set,
-                                  vector<Eigen::Vector3d>& start_end_derivatives)
+                                  vector<Eigen::Vector3d>& start_end_derivatives)//这段是给规划器提供轨迹点和起止点的速度、加速度信息，作为B样条的初始值
 {
   /* ---------- path duration ---------- */
   double T_sum = 0.0;
   if (is_shot_succ_)
-    T_sum += t_shot_;
-  PathNodePtr node = path_nodes_.back();
+    T_sum += t_shot_;//如果有shot trajectory，则加上shot trajectory的时间
+  PathNodePtr node = path_nodes_.back();//从终点开始回溯，计算整个轨迹的总时间，A*搜索的路径
   while (node->parent != NULL)
   {
-    T_sum += node->duration;
+    T_sum += node->duration;//计算总的时间长度
     node = node->parent;
   }
   // cout << "duration:" << T_sum << endl;
@@ -868,7 +870,7 @@ void KinodynamicAstar::getSamples(double& ts, vector<Eigen::Vector3d>& point_set
     for (int dim = 0; dim < 3; ++dim)
     {
       Vector4d coe = coef_shot_.row(dim);
-      end_acc(dim) = 2 * coe(2) + 6 * coe(3) * t_shot_;
+      end_acc(dim) = 2 * coe(2) + 6 * coe(3) * t_shot_;//计算终点的加速度
     }
   }
   else
@@ -879,8 +881,8 @@ void KinodynamicAstar::getSamples(double& ts, vector<Eigen::Vector3d>& point_set
   }
 
   // Get point samples
-  int seg_num = floor(T_sum / ts);
-  seg_num = max(8, seg_num);
+  int seg_num = floor(T_sum / ts);//最多应该采样多少个点
+  seg_num = max(8, seg_num);//至少整个轨迹有8个样本
   ts = T_sum / double(seg_num);
   bool sample_shot_traj = is_shot_succ_;
   node = path_nodes_.back();
@@ -899,7 +901,7 @@ void KinodynamicAstar::getSamples(double& ts, vector<Eigen::Vector3d>& point_set
       for (int dim = 0; dim < 3; dim++)
       {
         poly1d = coef_shot_.row(dim);
-        coord(dim) = poly1d.dot(time);
+        coord(dim) = poly1d.dot(time);//计算shot trajectory在时间t的坐标
       }
 
       point_set.push_back(coord);
@@ -916,7 +918,7 @@ void KinodynamicAstar::getSamples(double& ts, vector<Eigen::Vector3d>& point_set
     else
     {
       // samples on searched traj
-      Eigen::Matrix<double, 6, 1> x0 = node->parent->state;
+      Eigen::Matrix<double, 6, 1> x0 = node->parent->state;//当前节点的父节点的状态作为初始状态，计算pose的坐标
       Eigen::Matrix<double, 6, 1> xt;
       Vector3d ut = node->input;
 
@@ -977,16 +979,16 @@ int KinodynamicAstar::timeToIndex(double time)
   int idx = floor((time - time_origin_) * inv_time_resolution_);
   return idx;
 }
-
+//x0是前面的节点，x1是当前节点，um是控制输入，tau是时间间隔
 void KinodynamicAstar::stateTransit(Eigen::Matrix<double, 6, 1>& state0, Eigen::Matrix<double, 6, 1>& state1,
                                     Eigen::Vector3d um, double tau)
 {
-  for (int i = 0; i < 3; ++i)
+  for (int i = 0; i < 3; ++i)//初始化时它是一个6x6的单位矩阵，前3行是位置，后3行是速度
     phi_(i, i + 3) = tau;
 
   Eigen::Matrix<double, 6, 1> integral;
-  integral.head(3) = 0.5 * pow(tau, 2) * um;
-  integral.tail(3) = tau * um;
+  integral.head(3) = 0.5 * pow(tau, 2) * um;//0.5 * a * t^2 位移
+  integral.tail(3) = tau * um;//a * t 速度
 
   state1 = phi_ * state0 + integral;
 }

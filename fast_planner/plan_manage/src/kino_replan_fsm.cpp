@@ -173,7 +173,7 @@ void KinoReplanFSM::execFSMCallback(const ros::TimerEvent& e) {
 
     case EXEC_TRAJ: {
       /* determine if need to replan */
-      LocalTrajData* info     = &planner_manager_->local_data_;
+      LocalTrajData* info     = &planner_manager_->local_data_;//获取局部轨迹信息
       ros::Time      time_now = ros::Time::now();
       double         t_cur    = (time_now - info->start_time_).toSec();
       t_cur                   = min(info->duration_, t_cur);
@@ -181,7 +181,7 @@ void KinoReplanFSM::execFSMCallback(const ros::TimerEvent& e) {
       Eigen::Vector3d pos = info->position_traj_.evaluateDeBoorT(t_cur);
 
       /* && (end_pt_ - pos).norm() < 0.5 */
-      if (t_cur > info->duration_ - 1e-2) {
+      if (t_cur > info->duration_ - 1e-2) { //如果当前时间大于轨迹的总时间，则说明轨迹已经执行完毕
         have_target_ = false;
         changeFSMExecState(WAIT_TARGET, "FSM");
         return;

@@ -60,7 +60,7 @@ int Astar::search(Eigen::Vector3d start_pt, Eigen::Vector3d end_pt, bool dynamic
   cur_node->index = posToIndex(start_pt);  // 转换为网格索引
   cur_node->g_score = 0.0;              // 起点到自身的代价为0
 
-  Eigen::Vector3d end_state(6);
+  Eigen::Vector3d end_state(6);//这个变量没用到
   Eigen::Vector3i end_index;
   double time_to_goal;
 

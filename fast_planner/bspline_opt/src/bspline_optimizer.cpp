@@ -47,7 +47,7 @@ const int BsplineOptimizer::WAYPOINTS   = (1 << 6);  /**< @brief 路标点代价
  */
 const int BsplineOptimizer::GUIDE_PHASE = BsplineOptimizer::SMOOTHNESS | BsplineOptimizer::GUIDE;
 const int BsplineOptimizer::NORMAL_PHASE =
-    BsplineOptimizer::SMOOTHNESS | BsplineOptimizer::DISTANCE | BsplineOptimizer::FEASIBILITY;
+    BsplineOptimizer::SMOOTHNESS | BsplineOptimizer::DISTANCE | BsplineOptimizer::FEASIBILITY;//同时启用 平滑性、障碍物距离、动力学可行性​ 这三个代价项。这里顺序可以更改
 
 /**
  * @brief 从ROS参数服务器加载优化参数

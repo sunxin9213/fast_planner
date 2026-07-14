@@ -173,7 +173,7 @@ bool FastPlannerManager::kinodynamicReplan(Eigen::Vector3d start_pt, Eigen::Vect
     cout << "[kino replan]: kinodynamic search success." << endl;
   }
 
-  plan_data_.kino_path_ = kino_path_finder_->getKinoTraj(0.01);
+  plan_data_.kino_path_ = kino_path_finder_->getKinoTraj(0.01);//返回最终轨迹，是比A*搜索的路径更平滑(这里应该是频率更高，但未毕是最优)的轨迹，时间间隔为0.01s
 
   t_search = (ros::Time::now() - t1).toSec();
 
@@ -181,7 +181,7 @@ bool FastPlannerManager::kinodynamicReplan(Eigen::Vector3d start_pt, Eigen::Vect
 
   double                  ts = pp_.ctrl_pt_dist / pp_.max_vel_;
   vector<Eigen::Vector3d> point_set, start_end_derivatives;
-  kino_path_finder_->getSamples(ts, point_set, start_end_derivatives);
+  kino_path_finder_->getSamples(ts, point_set, start_end_derivatives);//真正用来生成B样条轨迹的点集和起止点的速度、加速度信息
 
   Eigen::MatrixXd ctrl_pts;
   NonUniformBspline::parameterizeToBspline(ts, point_set, start_end_derivatives, ctrl_pts);
@@ -195,6 +195,9 @@ bool FastPlannerManager::kinodynamicReplan(Eigen::Vector3d start_pt, Eigen::Vect
 
   if (status != KinodynamicAstar::REACH_END) {
     cost_function |= BsplineOptimizer::ENDPOINT;
+    // 如果 Kinodynamic A* 没有成功跑到终点（比如被障碍堵死、搜索超时、轨迹截断），
+    // 那么在接下来的 B 样条优化中，额外加入“端点代价（ENDPOINT）”，
+    // 强制让轨迹终点靠近 A* 给出的“最后可行位置”。
   }
 
   ctrl_pts = bspline_optimizers_[0]->BsplineOptimizeTraj(ctrl_pts, ts, cost_function, 1, 1);
@@ -224,7 +227,7 @@ bool FastPlannerManager::kinodynamicReplan(Eigen::Vector3d start_pt, Eigen::Vect
   double tn = pos.getTimeSum();
 
   cout << "[kino replan]: Reallocate ratio: " << tn / to << endl;
-  if (tn / to > 3.0) ROS_ERROR("reallocate error.");
+  if (tn / to > 3.0) ROS_ERROR("reallocate error.");//调整后需要消耗的时间过长，说明轨迹不合理
 
   t_adjust = (ros::Time::now() - t1).toSec();
 

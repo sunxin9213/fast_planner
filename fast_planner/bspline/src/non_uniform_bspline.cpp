@@ -64,7 +64,7 @@ NonUniformBspline::~NonUniformBspline() {}
  * @param interval 基础时间间隔 δt
  */
 void NonUniformBspline::setUniformBspline(const Eigen::MatrixXd& points, const int& order,
-                                           const double& interval) {
+                                           const double& interval) {//创建节点向量，为均匀节点向量
   // 初始化一条均匀B样条：保存控制点、阶数和基础时间间隔，并构造节点向量。
   control_points_ = points;  // 设置控制点
   p_              = order;   // 设置样条阶数
@@ -533,7 +533,7 @@ void NonUniformBspline::parameterizeToBspline(const double& ts, const vector<Eig
   /* 构造系数矩阵A (K+4) x (K+2) */
   // 内部点基函数系数: [1,4,1]/6 (来自三次B样条基函数)
   Eigen::Vector3d prow(3), vrow(3), arow(3);
-  prow << 1, 4, 1;    // 位置基函数系数
+  prow << 1, 4, 1;    // 位置基函数系数，sx:这个系数能反推回它是三次B样条的基函数系数
   vrow << -1, 0, 1;  // 速度基函数系数
   arow << 1, -2, 1;  // 加速度基函数系数
 
@@ -562,7 +562,7 @@ void NonUniformBspline::parameterizeToBspline(const double& ts, const vector<Eig
 
   // 边界导数约束
   for (int i = 0; i < 4; ++i) {
-    bx(K + i) = start_end_derivative[i](0);
+    bx(K + i) = start_end_derivative[i](0);//xyz三个轴
     by(K + i) = start_end_derivative[i](1);
     bz(K + i) = start_end_derivative[i](2);
   }
@@ -573,7 +573,7 @@ void NonUniformBspline::parameterizeToBspline(const double& ts, const vector<Eig
   Eigen::VectorXd pz = A.colPivHouseholderQr().solve(bz);
 
   /* 转换为控制点矩阵 */
-  ctrl_pts.resize(K + 2, 3);
+  ctrl_pts.resize(K + 2, 3);//根据A*得到的K个点，生成的是K+2个控制点（包含首尾控制点）
   ctrl_pts.col(0) = px;
   ctrl_pts.col(1) = py;
   ctrl_pts.col(2) = pz;

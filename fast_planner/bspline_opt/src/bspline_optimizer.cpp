@@ -236,7 +236,11 @@ void BsplineOptimizer::optimize() {
 
   /* 步骤3: 配置NLopt求解器 */
   // 根据是否为二次代价选择优化算法
-  nlopt::opt opt(nlopt::algorithm(isQuadratic() ? algorithm1_ : algorithm2_), variable_num_);
+  nlopt::opt opt(nlopt::algorithm(isQuadratic() ? algorithm1_ : algorithm2_), variable_num_);//variable_num_表示要优化的控制点的三维坐标
+  // 设置代价函数回调，
+  // 第一个参数，应该是指向目标函数的指针（函数名字就是这个函数的指针）或静态成员函数（这个函数在h文件中被声明为了static的函数了），或全局函数
+  // 第二个参数，是一个void*类型的指针，指向用户数据，这里传入了this指针，表示当前对象的地址，以方便将一些数据保存在当前对象中的成员变量中
+  // 等号约束和非等号约束是同样的含义
   opt.set_min_objective(BsplineOptimizer::costFunction, this);  // 设置代价函数
   opt.set_maxeval(max_iteration_num_[max_num_id_]);            // 最大迭代次数
   opt.set_maxtime(max_iteration_time_[max_time_id_]);          // 最大优化时间
@@ -244,10 +248,13 @@ void BsplineOptimizer::optimize() {
 
   /* 步骤4: 初始化优化变量 */
   vector<double> q(variable_num_);
-  for (int i = order_; i < pt_num; ++i) {
+  for (int i = order_; i < pt_num; ++i)
+  {
     // 跳过不需要优化的控制点
-    if (!(cost_function_ & ENDPOINT) && i >= pt_num - order_) continue;
-    for (int j = 0; j < dim_; j++) {
+    if (!(cost_function_ & ENDPOINT) && i >= pt_num - order_)//如果没有启用终点约束，并且当前控制点是最后order_个控制点，则跳过
+      continue;
+    for (int j = 0; j < dim_; j++)
+    {
       q[dim_ * (i - order_) + j] = control_points_(i, j);
     }
   }
@@ -274,9 +281,12 @@ void BsplineOptimizer::optimize() {
   }
 
   /* 步骤7: 更新控制点 */
-  for (int i = order_; i < control_points_.rows(); ++i) {
-    if (!(cost_function_ & ENDPOINT) && i >= pt_num - order_) continue;
-    for (int j = 0; j < dim_; j++) {
+  for (int i = order_; i < control_points_.rows(); ++i)
+  {
+    if (!(cost_function_ & ENDPOINT) && i >= pt_num - order_)
+      continue;
+    for (int j = 0; j < dim_; j++)
+    {
       control_points_(i, j) = best_variable_[dim_ * (i - order_) + j];
     }
   }
@@ -539,16 +549,16 @@ void BsplineOptimizer::combineCost(const std::vector<double>& x, std::vector<dou
 
   // This solver can support 1D-3D B-spline optimization, but we use Vector3d to store each control point
   // For 1D case, the second and third elements are zero, and similar for the 2D case.
-  for (int i = 0; i < order_; i++) {
-    for (int j = 0; j < dim_; ++j) {
-      g_q_[i][j] = control_points_(i, j);
+  for (int i = 0; i < order_; i++) {//前order_个点是固定的，这些点不参与优化，但参与代价计算
+    for (int j = 0; j < dim_; ++j) {//当dim_小于3时，后面的梯度都设置为0
+      g_q_[i][j] = control_points_(i, j);//因为这里使用的不是x传入的值，所以是不优化的
     }
     for (int j = dim_; j < 3; ++j) {
       g_q_[i][j] = 0.0;
     }
   }
 
-  for (int i = 0; i < variable_num_ / dim_; i++) {
+  for (int i = 0; i < variable_num_ / dim_; i++) {//order_之后的点先赋值控制点的值
     for (int j = 0; j < dim_; ++j) {
       g_q_[i + order_][j] = x[dim_ * i + j];
     }
@@ -557,14 +567,17 @@ void BsplineOptimizer::combineCost(const std::vector<double>& x, std::vector<dou
     }
   }
 
-  if (!(cost_function_ & ENDPOINT)) {
-    for (int i = 0; i < order_; i++) {
-
-      for (int j = 0; j < dim_; ++j) {
+  if (!(cost_function_ & ENDPOINT))//如果未开启末端代价，则末端控制点固定，终点约束
+  {
+    for (int i = 0; i < order_; i++)
+    {
+      for (int j = 0; j < dim_; ++j)
+      {
         g_q_[order_ + variable_num_ / dim_ + i][j] =
             control_points_(control_points_.rows() - order_ + i, j);
       }
-      for (int j = dim_; j < 3; ++j) {
+      for (int j = dim_; j < 3; ++j)
+      {
         g_q_[order_ + variable_num_ / dim_ + i][j] = 0.0;
       }
     }
@@ -578,41 +591,53 @@ void BsplineOptimizer::combineCost(const std::vector<double>& x, std::vector<dou
   double f_smoothness, f_distance, f_feasibility, f_endpoint, f_guide, f_waypoints;
   f_smoothness = f_distance = f_feasibility = f_endpoint = f_guide = f_waypoints = 0.0;
 
-  if (cost_function_ & SMOOTHNESS) {
+  if (cost_function_ & SMOOTHNESS)
+  { // 平滑性质，jerk约束
     calcSmoothnessCost(g_q_, f_smoothness, g_smoothness_);
     f_combine += lambda1_ * f_smoothness;
     for (int i = 0; i < variable_num_ / dim_; i++)
-      for (int j = 0; j < dim_; j++) grad[dim_ * i + j] += lambda1_ * g_smoothness_[i + order_](j);
+      for (int j = 0; j < dim_; j++)
+        grad[dim_ * i + j] += lambda1_ * g_smoothness_[i + order_](j);//前order_个点不优化
   }
-  if (cost_function_ & DISTANCE) {
+  if (cost_function_ & DISTANCE)
+  { // 离障碍物约束
     calcDistanceCost(g_q_, f_distance, g_distance_);
     f_combine += lambda2_ * f_distance;
     for (int i = 0; i < variable_num_ / dim_; i++)
-      for (int j = 0; j < dim_; j++) grad[dim_ * i + j] += lambda2_ * g_distance_[i + order_](j);
+      for (int j = 0; j < dim_; j++)
+        grad[dim_ * i + j] += lambda2_ * g_distance_[i + order_](j);
   }
-  if (cost_function_ & FEASIBILITY) {
+  if (cost_function_ & FEASIBILITY)
+  { // 动力可行性约束，速度和加速度上限
     calcFeasibilityCost(g_q_, f_feasibility, g_feasibility_);
     f_combine += lambda3_ * f_feasibility;
     for (int i = 0; i < variable_num_ / dim_; i++)
-      for (int j = 0; j < dim_; j++) grad[dim_ * i + j] += lambda3_ * g_feasibility_[i + order_](j);
+      for (int j = 0; j < dim_; j++)
+        grad[dim_ * i + j] += lambda3_ * g_feasibility_[i + order_](j);
   }
-  if (cost_function_ & ENDPOINT) {
+  if (cost_function_ & ENDPOINT)
+  { // 终点误差
     calcEndpointCost(g_q_, f_endpoint, g_endpoint_);
     f_combine += lambda4_ * f_endpoint;
     for (int i = 0; i < variable_num_ / dim_; i++)
-      for (int j = 0; j < dim_; j++) grad[dim_ * i + j] += lambda4_ * g_endpoint_[i + order_](j);
+      for (int j = 0; j < dim_; j++)
+        grad[dim_ * i + j] += lambda4_ * g_endpoint_[i + order_](j);
   }
-  if (cost_function_ & GUIDE) {
+  if (cost_function_ & GUIDE)
+  { // 引导向量（朝目标方向）
     calcGuideCost(g_q_, f_guide, g_guide_);
     f_combine += lambda5_ * f_guide;
     for (int i = 0; i < variable_num_ / dim_; i++)
-      for (int j = 0; j < dim_; j++) grad[dim_ * i + j] += lambda5_ * g_guide_[i + order_](j);
+      for (int j = 0; j < dim_; j++)
+        grad[dim_ * i + j] += lambda5_ * g_guide_[i + order_](j);
   }
-  if (cost_function_ & WAYPOINTS) {
+  if (cost_function_ & WAYPOINTS)
+  { // 途径点约束
     calcWaypointsCost(g_q_, f_waypoints, g_waypoints_);
     f_combine += lambda7_ * f_waypoints;
     for (int i = 0; i < variable_num_ / dim_; i++)
-      for (int j = 0; j < dim_; j++) grad[dim_ * i + j] += lambda7_ * g_waypoints_[i + order_](j);
+      for (int j = 0; j < dim_; j++)
+        grad[dim_ * i + j] += lambda7_ * g_waypoints_[i + order_](j);
   }
   /*  print cost  */
   // if ((cost_function_ & WAYPOINTS) && iter_num_ % 10 == 0) {
@@ -639,11 +664,12 @@ void BsplineOptimizer::combineCost(const std::vector<double>& x, std::vector<dou
  * @param func_data 用户数据(BsplineOptimizer指针)
  * @return 代价值
  */
+//x是优化变量，它是三维点的一维化表示
 double BsplineOptimizer::costFunction(const std::vector<double>& x, std::vector<double>& grad,
                                       void* func_data) {
   // 从用户数据获取优化器指针
   BsplineOptimizer* opt = reinterpret_cast<BsplineOptimizer*>(func_data);
-  double            cost;
+  double            cost;//总代价
   
   // 计算合并后的代价和梯度
   opt->combineCost(x, grad, cost);

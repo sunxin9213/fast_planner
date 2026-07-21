@@ -91,24 +91,24 @@ void FastPlannerManager::initPlanModules(ros::NodeHandle& nh) {
 void FastPlannerManager::setGlobalWaypoints(vector<Eigen::Vector3d>& waypoints) {
   plan_data_.global_waypoints_ = waypoints;
 }
-
+//从当前时刻开始，沿着已规划的 B 样条轨迹向前采样检查，判断未来一段时间内是否会撞到障碍物；
 bool FastPlannerManager::checkTrajCollision(double& distance) {
 
-  double t_now = (ros::Time::now() - local_data_.start_time_).toSec();
+  double t_now = (ros::Time::now() - local_data_.start_time_).toSec();//当前已经飞了多久
 
   double tm, tmp;
-  local_data_.position_traj_.getTimeSpan(tm, tmp);
-  Eigen::Vector3d cur_pt = local_data_.position_traj_.evaluateDeBoor(tm + t_now);
-
+  local_data_.position_traj_.getTimeSpan(tm, tmp);//轨迹起点时间为tm
+  Eigen::Vector3d cur_pt = local_data_.position_traj_.evaluateDeBoor(tm + t_now);//当前时间点，机器人真实位置，这里使用了tm+t_now是对时间轴进行了平移
+  //B 样条节点向量 不一定从时间 0 开始
   double          radius = 0.0;
   Eigen::Vector3d fut_pt;
   double          fut_t = 0.02;
 
-  while (radius < 6.0 && t_now + fut_t < local_data_.duration_) {
+  while (radius < 6.0 && t_now + fut_t < local_data_.duration_) {//检查当前轨迹长度6.0m范围内和固定时间范围内的碰撞情况
     fut_pt = local_data_.position_traj_.evaluateDeBoor(tm + t_now + fut_t);
 
     double dist = edt_environment_->evaluateCoarseEDT(fut_pt, -1.0);
-    if (dist < 0.1) {
+    if (dist < 0.1) {//有碰撞风险，返回false
       distance = radius;
       return false;
     }
@@ -200,7 +200,7 @@ bool FastPlannerManager::kinodynamicReplan(Eigen::Vector3d start_pt, Eigen::Vect
     // 强制让轨迹终点靠近 A* 给出的“最后可行位置”。
   }
 
-  ctrl_pts = bspline_optimizers_[0]->BsplineOptimizeTraj(ctrl_pts, ts, cost_function, 1, 1);
+  ctrl_pts = bspline_optimizers_[0]->BsplineOptimizeTraj(ctrl_pts, ts, cost_function, 1, 1);//使用各种代价优化控制点坐标
 
   t_opt = (ros::Time::now() - t1).toSec();
 
@@ -606,7 +606,7 @@ void FastPlannerManager::findCollisionRange(vector<Eigen::Vector3d>& colli_start
 }
 
 // !SECTION
-
+//在已知三维位置 B 样条轨迹的基础上，生成一个“平滑、连续、朝向运动方向”的偏航角（yaw）轨迹，并保证 yaw 在多圈旋转下不发生跳变。
 void FastPlannerManager::planYaw(const Eigen::Vector3d& start_yaw) {
   ROS_INFO("plan yaw");
   auto t1 = ros::Time::now();

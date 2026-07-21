@@ -245,7 +245,7 @@ private:
   /* ==================== 中间变量 ==================== */
   
   /** @brief 梯度缓冲区 - 避免重复内存分配 */
-  vector<Eigen::Vector3d> g_q_;            /**< @brief 总体梯度 */
+  vector<Eigen::Vector3d> g_q_;            //待优化变量，与计算梯度相关
   vector<Eigen::Vector3d> g_smoothness_;   /**< @brief 平滑度梯度 */
   vector<Eigen::Vector3d> g_distance_;     /**< @brief 距离梯度 */
   vector<Eigen::Vector3d> g_feasibility_; /**< @brief 可行性梯度 */

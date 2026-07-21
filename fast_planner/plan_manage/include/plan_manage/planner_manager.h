@@ -136,7 +136,7 @@ public:
   PlanParameters pp_;
   
   /// @brief 局部轨迹数据
-  LocalTrajData local_data_;//是一条B样条轨迹
+  LocalTrajData local_data_;//是一条B样条轨迹，优化后的控制点
   
   /// @brief 全局轨迹数据
   GlobalTrajData global_data_;
